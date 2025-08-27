@@ -1,7 +1,7 @@
 # CoreDNS acme-dns challenge plugin
 ## Description
 This plugin uses acme-dns challenge to get a certificate for specified domains. By default, it uses Let'sEncrypt.
-It is build on the [lego](https://github.com/go-acme/lego) and automatically creates the required records to solve the challenge.
+It is build on [lego](https://github.com/go-acme/lego) and automatically creates the required records to solve the challenge.
 
 ## Usage
 ### Compilation
@@ -26,7 +26,7 @@ make
 ```
 
 ### Configuration
-``` txt
+```
 example.com:53 {
     acmednschallenge {
         certSavePath <path_to_cert_folder>
@@ -100,7 +100,7 @@ example.com:53 {
 6. Add local entry for `example.com` in `/etc/hosts` for Linux or in `C:\Windows\System32\drivers\etc\hosts` for Windows pointing to `127.0.0.1`. There are scripts that will do that for you under `_development_stuff/scripts`.
 7. Create a Corefile under `_development_stuff/coredns_configs/Corefile`.
 
-    ```txt
+    ```
     example.com:53 {
         acmednschallenge {
             certSavePath <path_to_cert_folder>
