@@ -74,7 +74,7 @@ example.com:53 {
   - Custom nameservers to use when lego makes a precheck for the records. (For development purposes only)
 
 #### Basic example
-``` txt
+```
 example.com:53 {
     acmednschallenge {
         certSavePath /my_certs/
