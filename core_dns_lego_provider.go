@@ -59,6 +59,7 @@ func (p *coreDnsLegoProvider) Present(domain, _, keyAuth string) error {
 	if (*p.activeChallenges)[info.EffectiveFQDN] == nil {
 		(*p.activeChallenges)[info.EffectiveFQDN] = []string{}
 	}
+	log.Info(info.Value)
 	(*p.activeChallenges)[info.EffectiveFQDN] = append((*p.activeChallenges)[info.EffectiveFQDN], info.Value)
 	return nil
 }
