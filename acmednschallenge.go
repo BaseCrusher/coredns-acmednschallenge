@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"net"
 	"strings"
 	"sync"
 	"time"
@@ -85,7 +86,7 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 		return plugin.NextOrFailure(ac.Name(), ac.Next, ctx, w, r)
 	}
 
-	txtValues, ok := ac.challenges[qName]
+	txtValues, ok := (*ac.challenges)[qName]
 	if !ok {
 		return plugin.NextOrFailure(ac.Name(), ac.Next, ctx, w, r)
 	}
