@@ -45,15 +45,43 @@ func (ac *acmeChallenge) Name() string { return name }
 func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
 	state := request.Request{W: w, Req: r}
 
+	remoteAddr := w.RemoteAddr()
+	clientIP, _, err := net.SplitHostPort(remoteAddr.String())
+	if err != nil {
+		log.Errorf("failed to parse remote address: %v", err)
+		clientIP = ""
+	}
+	
 	qName := state.QName()
 	qType := state.Type()
+
+	if qType == "NS" && (clientIP == "127.0.0.1" || clientIP == "::1") {
+		log.Debugf("returning localhost NS record for %s (from %s)", qName, clientIP)
+
+		m := new(dns.Msg)
+		m.SetReply(r)
+		m.Authoritative = true
+
+		nsRecord := &dns.NS{
+			Hdr: dns.RR_Header{
+				Name:   dns.Fqdn(qName),
+				Rrtype: dns.TypeNS,
+				Class:  dns.ClassINET,
+				Ttl:    60,
+			},
+			Ns: "localhost.",
+		}
+
+		m.Answer = append(m.Answer, nsRecord)
+		_ = w.WriteMsg(m)
+		return dns.RcodeSuccess, nil
+	}
+	
 	isAcmeChallenge := strings.HasPrefix(qName, "_acme-challenge.")
 	isTxtRequest := qType == "TXT"
 
 	if !isTxtRequest || !isAcmeChallenge {
-		log.Debug(qName)
-		log.Debug(qType)
-		log.Debug("request was not a dns challenge")
+		log.Debugf("request was not a dns challenge. Domain: %s, Type: %s", qName, qType)
 		return plugin.NextOrFailure(ac.Name(), ac.Next, ctx, w, r)
 	}
 
