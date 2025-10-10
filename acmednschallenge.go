@@ -51,7 +51,7 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 		log.Errorf("failed to parse remote address: %v", err)
 		clientIP = ""
 	}
-	
+
 	qName := state.QName()
 	qType := state.Type()
 
@@ -76,7 +76,7 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 		_ = w.WriteMsg(m)
 		return dns.RcodeSuccess, nil
 	}
-	
+
 	isAcmeChallenge := strings.HasPrefix(qName, "_acme-challenge.")
 	isTxtRequest := qType == "TXT"
 
@@ -85,7 +85,7 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 		return plugin.NextOrFailure(ac.Name(), ac.Next, ctx, w, r)
 	}
 
-	txtValues, ok := (*ac.challenges)[qName]
+	txtValues, ok := ac.challenges[qName]
 	if !ok {
 		return plugin.NextOrFailure(ac.Name(), ac.Next, ctx, w, r)
 	}
