@@ -74,7 +74,8 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 				Ns: "localhost.",
 			}
 			m.Answer = append(m.Answer, nsRecord)
-
+			_ = w.WriteMsg(m)
+			return dns.RcodeSuccess, nil
 		case "SOA":
 			log.Debugf("Returning SOA record for %s pointing to itself", qName)
 			soaRecord := &dns.SOA{
@@ -93,14 +94,11 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 				Minttl:  60,
 			}
 			m.Answer = append(m.Answer, soaRecord)
-
+			_ = w.WriteMsg(m)
+			return dns.RcodeSuccess, nil
 		default:
-			// Not NS or SOA, pass to next plugin
-			return plugin.NextOrFailure(ac.Name(), ac.Next, ctx, w, r)
+			break
 		}
-
-		_ = w.WriteMsg(m)
-		return dns.RcodeSuccess, nil
 	}
 
 	isAcmeChallenge := strings.HasPrefix(strings.ToLower(qName), "_acme-challenge.")
