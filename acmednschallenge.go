@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"net"
 	"strings"
 	"sync"
 	"time"
@@ -46,17 +45,17 @@ func (ac *acmeChallenge) Name() string { return name }
 func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
 	state := request.Request{W: w, Req: r}
 
-	remoteAddr := w.RemoteAddr()
+	/*remoteAddr := w.RemoteAddr()
 	clientIP, _, err := net.SplitHostPort(remoteAddr.String())
 	if err != nil {
 		log.Errorf("failed to parse remote address: %v", err)
 		clientIP = ""
-	}
+	}*/
 
 	qName := state.QName()
 	qType := state.Type()
 
-	if clientIP == "127.0.0.1" || clientIP == "::1" {
+	/*if clientIP == "127.0.0.1" || clientIP == "::1" {
 		m := new(dns.Msg)
 		m.SetReply(r)
 		m.Authoritative = true
@@ -99,7 +98,7 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 		default:
 			break
 		}
-	}
+	}*/
 
 	isAcmeChallenge := strings.HasPrefix(strings.ToLower(qName), "_acme-challenge.")
 	isTxtRequest := qType == "TXT"
