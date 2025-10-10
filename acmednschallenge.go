@@ -70,7 +70,7 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 				Class:  dns.ClassINET,
 				Ttl:    60,
 			},
-			Ns: "127.0.0.1",
+			Ns: "localhost.",
 		}
 
 		m.Answer = append(m.Answer, nsRecord)
