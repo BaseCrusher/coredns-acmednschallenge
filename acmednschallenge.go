@@ -78,7 +78,7 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 		return dns.RcodeSuccess, nil
 	}
 
-	isAcmeChallenge := strings.HasPrefix(qName, "_acme-challenge.")
+	isAcmeChallenge := strings.HasPrefix(strings.ToLower(qName), "_acme-challenge.")
 	isTxtRequest := qType == "TXT"
 
 	if !isTxtRequest || !isAcmeChallenge {
