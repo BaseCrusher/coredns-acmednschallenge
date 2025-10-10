@@ -51,6 +51,8 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 	isTxtRequest := qType == "TXT"
 
 	if !isTxtRequest || !isAcmeChallenge {
+		log.Debug(qName)
+		log.Debug(qType)
 		log.Debug("request was not a dns challenge")
 		return plugin.NextOrFailure(ac.Name(), ac.Next, ctx, w, r)
 	}
