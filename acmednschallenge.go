@@ -56,24 +56,49 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 	qName := state.QName()
 	qType := state.Type()
 
-	if qType == "NS" && (clientIP == "127.0.0.1" || clientIP == "::1") {
-		log.Debugf("returning localhost NS record for %s (from %s)", qName, clientIP)
-
+	if clientIP == "127.0.0.1" || clientIP == "::1" {
 		m := new(dns.Msg)
 		m.SetReply(r)
 		m.Authoritative = true
 
-		nsRecord := &dns.NS{
-			Hdr: dns.RR_Header{
-				Name:   dns.Fqdn(qName),
-				Rrtype: dns.TypeNS,
-				Class:  dns.ClassINET,
-				Ttl:    60,
-			},
-			Ns: "localhost.",
+		switch qType {
+		case "NS":
+			log.Debugf("Returning localhost NS record for %s", qName)
+			nsRecord := &dns.NS{
+				Hdr: dns.RR_Header{
+					Name:   dns.Fqdn(qName),
+					Rrtype: dns.TypeNS,
+					Class:  dns.ClassINET,
+					Ttl:    60,
+				},
+				Ns: "localhost.",
+			}
+			m.Answer = append(m.Answer, nsRecord)
+
+		case "SOA":
+			log.Debugf("Returning SOA record for %s pointing to itself", qName)
+			soaRecord := &dns.SOA{
+				Hdr: dns.RR_Header{
+					Name:   dns.Fqdn(qName),
+					Rrtype: dns.TypeSOA,
+					Class:  dns.ClassINET,
+					Ttl:    60,
+				},
+				Ns:      "localhost.",
+				Mbox:    "hostmaster.localhost.",
+				Serial:  uint32(time.Now().Unix()), // serial number
+				Refresh: 3600,
+				Retry:   600,
+				Expire:  86400,
+				Minttl:  60,
+			}
+			m.Answer = append(m.Answer, soaRecord)
+
+		default:
+			// Not NS or SOA, pass to next plugin
+			return plugin.NextOrFailure(ac.Name(), ac.Next, ctx, w, r)
 		}
 
-		m.Answer = append(m.Answer, nsRecord)
 		_ = w.WriteMsg(m)
 		return dns.RcodeSuccess, nil
 	}
