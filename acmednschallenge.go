@@ -45,60 +45,8 @@ func (ac *acmeChallenge) Name() string { return name }
 func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
 	state := request.Request{W: w, Req: r}
 
-	/*remoteAddr := w.RemoteAddr()
-	clientIP, _, err := net.SplitHostPort(remoteAddr.String())
-	if err != nil {
-		log.Errorf("failed to parse remote address: %v", err)
-		clientIP = ""
-	}*/
-
 	qName := state.QName()
 	qType := state.Type()
-
-	/*if clientIP == "127.0.0.1" || clientIP == "::1" {
-		m := new(dns.Msg)
-		m.SetReply(r)
-		m.Authoritative = true
-
-		switch qType {
-		case "NS":
-			log.Debugf("Returning localhost NS record for %s", qName)
-			nsRecord := &dns.NS{
-				Hdr: dns.RR_Header{
-					Name:   dns.Fqdn(qName),
-					Rrtype: dns.TypeNS,
-					Class:  dns.ClassINET,
-					Ttl:    60,
-				},
-				Ns: "localhost.",
-			}
-			m.Answer = append(m.Answer, nsRecord)
-			_ = w.WriteMsg(m)
-			return dns.RcodeSuccess, nil
-		case "SOA":
-			log.Debugf("Returning SOA record for %s pointing to itself", qName)
-			soaRecord := &dns.SOA{
-				Hdr: dns.RR_Header{
-					Name:   dns.Fqdn(qName),
-					Rrtype: dns.TypeSOA,
-					Class:  dns.ClassINET,
-					Ttl:    60,
-				},
-				Ns:      "localhost.",
-				Mbox:    "hostmaster.localhost.",
-				Serial:  uint32(time.Now().Unix()), // serial number
-				Refresh: 3600,
-				Retry:   600,
-				Expire:  86400,
-				Minttl:  60,
-			}
-			m.Answer = append(m.Answer, soaRecord)
-			_ = w.WriteMsg(m)
-			return dns.RcodeSuccess, nil
-		default:
-			break
-		}
-	}*/
 
 	isAcmeChallenge := strings.HasPrefix(strings.ToLower(qName), "_acme-challenge.")
 	isTxtRequest := qType == "TXT"
@@ -123,7 +71,7 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 				Name:   dns.Fqdn(qName),
 				Rrtype: dns.TypeTXT,
 				Class:  dns.ClassINET,
-				Ttl:    60,
+				Ttl:    120,
 			},
 			Txt: []string{txtValue},
 		}
