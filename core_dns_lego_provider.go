@@ -65,7 +65,7 @@ func newCoreDnsLegoProvider(acc *ACMEChallengeConfig, challenges *map[string][]s
 
 		err = os.WriteFile(userFile, userJson, 0600)
 		if err != nil {
-			log.Fatal("could not write user.json")
+			log.Fatalf("could not write user.json. err: %s", err)
 			return nil, errors.New("could not write user.json")
 		}
 	}
