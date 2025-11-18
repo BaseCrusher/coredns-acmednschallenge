@@ -71,7 +71,7 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 				Name:   dns.Fqdn(qName),
 				Rrtype: dns.TypeTXT,
 				Class:  dns.ClassINET,
-				Ttl:    120,
+				Ttl:    ac.config.dnsTTL,
 			},
 			Txt: []string{txtValue},
 		}

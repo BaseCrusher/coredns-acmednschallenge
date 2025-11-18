@@ -27,6 +27,7 @@ type ACMEChallengeConfig struct {
 	allowInsecureCAD         bool
 	customNameservers        []string
 	dnsTimeout               time.Duration
+	dnsTTL                   uint32
 	certValidationInterval   time.Duration
 }
 
@@ -34,6 +35,7 @@ func parseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 	cfg := &ACMEChallengeConfig{
 		certSavePath:             defaultCertSavePath,
 		renewBeforeDays:          defaultRenewBeforeDays,
+		dnsTTL:                   60,
 		useLetsEncryptTestServer: false,
 		acceptedLetsEncryptToS:   false,
 		customNameservers:        []string{},
@@ -78,7 +80,7 @@ func parseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 			}
 			cfg.certSavePath = p
 			break
-		case "renewBeforeDays":
+		case "ttl":
 			if !c.NextArg() {
 				return nil, c.ArgErr()
 			}
@@ -90,6 +92,19 @@ func parseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 				return nil, c.Errf("invalid RenewBeforeDays it must be an integer between 1 and 30 but the value is: %v", renewBeforeDays)
 			}
 			cfg.renewBeforeDays = uint32(renewBeforeDays)
+			break
+		case "dnsTTL":
+			if !c.NextArg() {
+				return nil, c.ArgErr()
+			}
+			ttl, err := strconv.ParseUint(c.Val(), 10, 32)
+			if err != nil {
+				return nil, c.Errf("invalid TTL it must be an integer between 60 and 600 but the value is: %v", c.Val())
+			}
+			if ttl < 1 || ttl > 30 {
+				return nil, c.Errf("invalid TTL it must be an integer between 60 and 600 but the value is: %v", ttl)
+			}
+			cfg.renewBeforeDays = uint32(ttl)
 			break
 		case "additionalSans":
 			var sans []string
