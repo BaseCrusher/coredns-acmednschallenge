@@ -26,6 +26,7 @@ type ACMEChallengeConfig struct {
 	customCAD                string
 	allowInsecureCAD         bool
 	customNameservers        []string
+	dnsTimeout               time.Duration
 	certValidationInterval   time.Duration
 }
 
@@ -37,6 +38,7 @@ func parseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 		acceptedLetsEncryptToS:   false,
 		customNameservers:        []string{},
 		certValidationInterval:   24 * time.Hour,
+		dnsTimeout:               60 * time.Second,
 	}
 
 	// Get the zone from the server block
@@ -153,6 +155,16 @@ func parseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 			}
 			cfg.customNameservers = nameservers
 		case "certValidationInterval":
+			if !c.NextArg() {
+				return nil, c.ArgErr()
+			}
+			duration := c.Val()
+			d, err := time.ParseDuration(duration)
+			if err != nil {
+				return nil, c.Errf("invalid certValidationInterval: %v", duration)
+			}
+			cfg.certValidationInterval = d
+		case "dnsTimeout":
 			if !c.NextArg() {
 				return nil, c.ArgErr()
 			}

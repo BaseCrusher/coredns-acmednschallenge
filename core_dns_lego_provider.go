@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"time"
 
 	clog "github.com/coredns/coredns/plugin/pkg/log"
 	"github.com/go-acme/lego/v4/challenge/dns01"
@@ -22,6 +23,7 @@ type coreDnsLegoProvider struct {
 	customCAD                string
 	allowInsecureCAD         bool
 	customNameservers        []string
+	dnsTimeout               time.Duration
 }
 
 func newCoreDnsLegoProvider(acc *ACMEChallengeConfig, challenges *map[string][]string, loggerName string) (*coreDnsLegoProvider, error) {
@@ -49,6 +51,7 @@ func newCoreDnsLegoProvider(acc *ACMEChallengeConfig, challenges *map[string][]s
 		customCAD:                acc.customCAD,
 		allowInsecureCAD:         acc.allowInsecureCAD,
 		customNameservers:        acc.customNameservers,
+		dnsTimeout:               acc.dnsTimeout,
 	}
 
 	return provider, nil
@@ -59,7 +62,9 @@ func (p *coreDnsLegoProvider) Present(domain, _, keyAuth string) error {
 	if (*p.activeChallenges)[info.EffectiveFQDN] == nil {
 		(*p.activeChallenges)[info.EffectiveFQDN] = []string{}
 	}
+
 	log.Info(info.Value)
+
 	(*p.activeChallenges)[info.EffectiveFQDN] = append((*p.activeChallenges)[info.EffectiveFQDN], info.Value)
 	return nil
 }

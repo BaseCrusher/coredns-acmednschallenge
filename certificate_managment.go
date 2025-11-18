@@ -3,7 +3,6 @@ package acmednschallenge
 import (
 	"crypto/tls"
 	"net/http"
-	"time"
 
 	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/certificate"
@@ -80,10 +79,12 @@ func (p *coreDnsLegoProvider) getAcmeClient() (*lego.Client, error) {
 		return nil, err
 	}
 
+	dnsTimeout := dns01.AddDNSTimeout(p.dnsTimeout)
+
 	if len(p.customNameservers) < 1 {
-		err = client.Challenge.SetDNS01Provider(p, dns01.AddDNSTimeout(600*time.Second), dns01.PropagationWait(5*time.Second, false))
+		err = client.Challenge.SetDNS01Provider(p, dnsTimeout)
 	} else {
-		err = client.Challenge.SetDNS01Provider(p, dns01.AddDNSTimeout(600*time.Second), dns01.PropagationWait(5*time.Second, false), dns01.AddRecursiveNameservers(p.customNameservers))
+		err = client.Challenge.SetDNS01Provider(p, dnsTimeout, dns01.AddRecursiveNameservers(p.customNameservers))
 	}
 
 	if err != nil {

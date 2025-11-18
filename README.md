@@ -36,6 +36,7 @@ example.com:53 {
         additionalSans *.example.com
         renewBeforeDays 20
         certValidationInterval 24h
+        dnsTimeout 60s
         customCAD https://localhost:14000/dir
         allowInsecureCAD
         customNameservers 127.0.0.1:53
@@ -72,6 +73,9 @@ example.com:53 {
 - `customNameservers` 
   - Optional. String list
   - Custom nameservers to use when lego makes a precheck for the records. (For development purposes only)
+- `dnsTimeout`
+  - Optional. Duration. Default: 60s
+    - Timeout for DNS Propagation.
 
 #### Basic example
 ```
