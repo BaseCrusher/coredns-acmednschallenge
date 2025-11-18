@@ -7,9 +7,9 @@ import (
 )
 
 type AcmeUser struct {
-	Email        string
-	Registration *registration.Resource
-	key          crypto.PrivateKey
+	Email        string                 `json:"email"`
+	Registration *registration.Resource `json:"-"` // ignored
+	Key          crypto.PrivateKey      `json:"key"`
 }
 
 func (u *AcmeUser) GetEmail() string {
@@ -19,5 +19,5 @@ func (u *AcmeUser) GetRegistration() *registration.Resource {
 	return u.Registration
 }
 func (u *AcmeUser) GetPrivateKey() crypto.PrivateKey {
-	return u.key
+	return u.Key
 }
