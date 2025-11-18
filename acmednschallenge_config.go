@@ -80,7 +80,7 @@ func parseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 			}
 			cfg.certSavePath = p
 			break
-		case "ttl":
+		case "renewBeforeDays":
 			if !c.NextArg() {
 				return nil, c.ArgErr()
 			}
@@ -101,7 +101,7 @@ func parseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 			if err != nil {
 				return nil, c.Errf("invalid TTL it must be an integer between 60 and 600 but the value is: %v", c.Val())
 			}
-			if ttl < 1 || ttl > 30 {
+			if ttl < 60 || ttl > 600 {
 				return nil, c.Errf("invalid TTL it must be an integer between 60 and 600 but the value is: %v", ttl)
 			}
 			cfg.renewBeforeDays = uint32(ttl)
