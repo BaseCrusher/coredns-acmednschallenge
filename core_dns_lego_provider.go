@@ -4,8 +4,6 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -34,46 +32,27 @@ func newCoreDnsLegoProvider(acc *ACMEChallengeConfig, challenges *map[string][]s
 	acmeLogger := clog.NewWithPlugin(fmt.Sprintf("%s.lego", loggerName))
 	acmeLog.Logger = &logger{logger: acmeLogger}
 
-	userFile := filepath.Join(acc.certSavePath, "user.json")
-	var user *AcmeUser
+	keyFile := filepath.Join(acc.certSavePath, "acc.key")
+	keyBytes, err := os.ReadFile(keyFile)
 
-	data, err := os.ReadFile(userFile)
+	var privateKey *ecdsa.PrivateKey
 	if err == nil {
-		user = &AcmeUser{}
-		if err := json.Unmarshal(data, user); err != nil {
-			user = nil
+		privateKey, err = ecdsa.ParseRawPrivateKey(elliptic.P256(), keyBytes)
+		if err != nil {
+			log.Debug("could not parse private key")
+			return nil, err
+		}
+	} else {
+		privateKey, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			log.Debug("could not create private key")
+			return nil, err
 		}
 	}
 
-	if user == nil {
-		privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-		if err != nil {
-			log.Debug("could not create private key")
-			return nil, errors.New("could not create ")
-		}
-
-		user = &AcmeUser{
-			Email: acc.email,
-			Key:   privateKey,
-		}
-
-		userJson, err := json.Marshal(user)
-		if err != nil {
-			log.Debug("could not marshal user to JSON")
-			return nil, errors.New("could not marshal user")
-		}
-
-		err = os.MkdirAll(acc.certSavePath, os.ModePerm)
-		if err != nil {
-			log.Debugf("could not write user.json. err: %s", err)
-			return nil, errors.New("could not write user.json")
-		}
-
-		err = os.WriteFile(userFile, userJson, 0600)
-		if err != nil {
-			log.Debugf("could not write user.json. err: %s", err)
-			return nil, errors.New("could not write user.json")
-		}
+	user := &AcmeUser{
+		Email: acc.email,
+		Key:   privateKey,
 	}
 
 	provider := &coreDnsLegoProvider{

@@ -21,15 +21,15 @@ func (l *logger) Println(args ...any) {
 }
 
 func (l *logger) Fatal(args ...interface{}) {
-	l.logger.Fatal(args...)
+	l.logger.Error(args...)
 }
 
 func (l *logger) Fatalf(format string, args ...interface{}) {
-	l.logger.Fatalf(format, args...)
+	l.logger.Errorf(format, args...)
 }
 
 func (l *logger) Fatalln(args ...any) {
-	l.logger.Fatal(args...)
+	l.logger.Error(args...)
 }
 
 func (l *logger) Error(args ...interface{}) {
