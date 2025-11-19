@@ -63,6 +63,12 @@ func newCoreDnsLegoProvider(acc *ACMEChallengeConfig, challenges *map[string][]s
 			return nil, errors.New("could not marshal user")
 		}
 
+		err = os.MkdirAll(acc.certSavePath, os.ModePerm)
+		if err != nil {
+			log.Fatalf("could not write user.json. err: %s", err)
+			return nil, errors.New("could not write user.json")
+		}
+
 		err = os.WriteFile(userFile, userJson, 0600)
 		if err != nil {
 			log.Fatalf("could not write user.json. err: %s", err)
