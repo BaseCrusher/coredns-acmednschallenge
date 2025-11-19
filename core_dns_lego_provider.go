@@ -48,7 +48,7 @@ func newCoreDnsLegoProvider(acc *ACMEChallengeConfig, challenges *map[string][]s
 	if user == nil {
 		privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		if err != nil {
-			log.Fatal("could not create private key")
+			log.Debug("could not create private key")
 			return nil, errors.New("could not create ")
 		}
 
@@ -59,19 +59,19 @@ func newCoreDnsLegoProvider(acc *ACMEChallengeConfig, challenges *map[string][]s
 
 		userJson, err := json.Marshal(user)
 		if err != nil {
-			log.Fatal("could not marshal user to JSON")
+			log.Debug("could not marshal user to JSON")
 			return nil, errors.New("could not marshal user")
 		}
 
 		err = os.MkdirAll(acc.certSavePath, os.ModePerm)
 		if err != nil {
-			log.Fatalf("could not write user.json. err: %s", err)
+			log.Debugf("could not write user.json. err: %s", err)
 			return nil, errors.New("could not write user.json")
 		}
 
 		err = os.WriteFile(userFile, userJson, 0600)
 		if err != nil {
-			log.Fatalf("could not write user.json. err: %s", err)
+			log.Debugf("could not write user.json. err: %s", err)
 			return nil, errors.New("could not write user.json")
 		}
 	}
