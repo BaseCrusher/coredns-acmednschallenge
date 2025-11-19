@@ -1,15 +1,19 @@
 package acmednschallenge
 
 import (
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"encoding/pem"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
 	clog "github.com/coredns/coredns/plugin/pkg/log"
+	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	acmeLog "github.com/go-acme/lego/v4/log"
 )
@@ -32,20 +36,42 @@ func newCoreDnsLegoProvider(acc *ACMEChallengeConfig, challenges *map[string][]s
 	acmeLogger := clog.NewWithPlugin(fmt.Sprintf("%s.lego", loggerName))
 	acmeLog.Logger = &logger{logger: acmeLogger}
 
+	var privateKey crypto.PrivateKey
+
 	keyFile := filepath.Join(acc.certSavePath, "acc.key")
 	keyBytes, err := os.ReadFile(keyFile)
 
-	var privateKey *ecdsa.PrivateKey
-	if err == nil {
-		privateKey, err = ecdsa.ParseRawPrivateKey(elliptic.P256(), keyBytes)
-		if err != nil {
-			log.Debug("could not parse private key")
-			return nil, err
-		}
-	} else {
+	if err != nil {
 		privateKey, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		if err != nil {
 			log.Debug("could not create private key")
+			return nil, err
+		}
+
+		err = os.MkdirAll(acc.certSavePath, os.ModePerm)
+		if err != nil {
+			log.Debugf("could not write user.json. err: %s", err)
+			return nil, errors.New("could not write user.json")
+		}
+
+		certOut, err := os.Create(keyFile)
+		if err != nil {
+			log.Debugf("could not create file at %s", keyFile)
+			return nil, err
+		}
+		defer certOut.Close()
+
+		pemKey := certcrypto.PEMBlock(privateKey)
+
+		err = pem.Encode(certOut, pemKey)
+		if err != nil {
+			log.Debug("could not encode the certificate")
+			return nil, err
+		}
+	} else {
+		privateKey, err = certcrypto.ParsePEMPrivateKey(keyBytes)
+		if err != nil {
+			log.Debug("could not parse private key")
 			return nil, err
 		}
 	}
