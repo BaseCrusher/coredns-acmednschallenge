@@ -107,6 +107,7 @@ func (ac *acmeChallenge) checkAndUpdateCertForAllDomains() {
 	}
 
 	var wg sync.WaitGroup
+	log.Infof("domains %s", ac.config.managedDomains)
 	for domain := range maps.Keys(ac.config.managedDomains) {
 		log.Infof("Checking domain %s", domain)
 		wg.Add(1)
