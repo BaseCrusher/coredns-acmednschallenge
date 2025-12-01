@@ -58,7 +58,11 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 
 	txtValues, ok := (*ac.challenges)[qName]
 	if !ok {
-		return plugin.NextOrFailure(ac.Name(), ac.Next, ctx, w, r)
+		m := new(dns.Msg)
+		m.SetReply(r)
+		m.Authoritative = true
+		_ = w.WriteMsg(m)
+		return dns.RcodeSuccess, nil
 	}
 
 	m := new(dns.Msg)
