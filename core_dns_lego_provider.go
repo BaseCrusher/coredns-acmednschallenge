@@ -113,12 +113,13 @@ func (p *coreDnsLegoProvider) Present(domain, _, keyAuth string) error {
 	(*p.activeChallenges)[info.EffectiveFQDN] = append((*p.activeChallenges)[info.EffectiveFQDN], info.Value)
 
 	log.Infof("added TXT '%s' record for domain '%s'", info.Value, domain)
+	time.Sleep(100 * time.Millisecond)
 	return nil
 }
 
 func (p *coreDnsLegoProvider) CleanUp(domain, _, keyAuth string) error {
-	//info := dns01.GetChallengeInfo(domain, keyAuth)
-	//delete(*p.activeChallenges, info.EffectiveFQDN)
-	//log.Infof("removed TXT '%s' record for domain '%s'", info.Value, info.EffectiveFQDN)
+	info := dns01.GetChallengeInfo(domain, keyAuth)
+	delete(*p.activeChallenges, info.EffectiveFQDN)
+	log.Infof("removed TXT '%s' record for domain '%s'", info.Value, info.EffectiveFQDN)
 	return nil
 }

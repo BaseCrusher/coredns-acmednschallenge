@@ -99,7 +99,7 @@ func (ac *acmeChallenge) start() {
 }
 
 func (ac *acmeChallenge) checkAndUpdateCertForAllDomains() {
-	log.Info("Starting cert validation!")
+	log.Info("starting cert validation!")
 
 	if err := assertCertificateDirectoryExist(ac.config.certSavePath); err != nil {
 		log.Errorf("cannot create or access certificate directory: %s", err)
@@ -108,6 +108,7 @@ func (ac *acmeChallenge) checkAndUpdateCertForAllDomains() {
 
 	var wg sync.WaitGroup
 	for domain := range maps.Keys(ac.config.managedDomains) {
+		log.Infof("Checking domain %s", domain)
 		wg.Add(1)
 		go func(d string) {
 			defer wg.Done()

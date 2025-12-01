@@ -46,7 +46,7 @@ func (p *coreDnsLegoProvider) obtainNewCertificate(mainDomain string) (*certific
 
 	r := certificate.ObtainRequest{
 		Domains: domains,
-		Bundle:  true,
+		Bundle:  len(domains) > 1,
 	}
 
 	certificates, err := client.Certificate.Obtain(r)
