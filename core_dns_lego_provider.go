@@ -113,7 +113,7 @@ func (p *coreDnsLegoProvider) Present(domain, _, keyAuth string) error {
 	(*p.activeChallenges)[info.EffectiveFQDN] = append((*p.activeChallenges)[info.EffectiveFQDN], info.Value)
 
 	log.Infof("added TXT '%s' record for domain '%s'", info.Value, domain)
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(1000 * time.Millisecond)
 	return nil
 }
 
