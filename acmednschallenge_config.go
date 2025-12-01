@@ -89,10 +89,10 @@ func parseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 			}
 			renewBeforeDays, err := strconv.ParseUint(c.Val(), 10, 32)
 			if err != nil {
-				return nil, c.Errf("invalid RenewBeforeDays it must be an integer between 1 and 30 but the value is: %v", c.Val())
+				return nil, c.Errf("invalid renewBeforeDays it must be an integer between 1 and 30 but the value is: %v", c.Val())
 			}
 			if renewBeforeDays < 1 || renewBeforeDays > 30 {
-				return nil, c.Errf("invalid RenewBeforeDays it must be an integer between 1 and 30 but the value is: %v", renewBeforeDays)
+				return nil, c.Errf("invalid renewBeforeDays it must be an integer between 1 and 30 but the value is: %v", renewBeforeDays)
 			}
 			cfg.renewBeforeDays = uint32(renewBeforeDays)
 			break
@@ -102,10 +102,10 @@ func parseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 			}
 			ttl, err := strconv.ParseUint(c.Val(), 10, 32)
 			if err != nil {
-				return nil, c.Errf("invalid TTL it must be an integer between 60 and 600 but the value is: %v", c.Val())
+				return nil, c.Errf("invalid dnsTTL it must be an integer between 60 and 600 but the value is: %v", c.Val())
 			}
 			if ttl < 60 || ttl > 600 {
-				return nil, c.Errf("invalid TTL it must be an integer between 60 and 600 but the value is: %v", ttl)
+				return nil, c.Errf("invalid dnsTTL it must be an integer between 60 and 600 but the value is: %v", ttl)
 			}
 			cfg.renewBeforeDays = uint32(ttl)
 			break
