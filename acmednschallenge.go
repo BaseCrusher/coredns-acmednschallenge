@@ -49,24 +49,14 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 	qType := state.Type()
 
 	isAcmeChallenge := strings.HasPrefix(strings.ToLower(qName), "_acme-challenge.")
-	isTxtRequest := qType == "TXT"
-
-	txtValues, ok := (*ac.challenges)[qName]
-
-	if isAcmeChallenge && !isTxtRequest && ok {
-		m := new(dns.Msg)
-		m.SetReply(r)
-		m.Authoritative = true
-		_ = w.WriteMsg(m)
-		return dns.RcodeSuccess, nil
-	}
-
-	if !isTxtRequest || !isAcmeChallenge {
-		log.Debugf("request was not a dns challenge. Domain: %s, Type: %s", qName, qType)
+	if !isAcmeChallenge {
 		return plugin.NextOrFailure(ac.Name(), ac.Next, ctx, w, r)
 	}
 
-	if !ok {
+	isTxtRequest := qType == "TXT"
+	txtValues, ok := (*ac.challenges)[qName]
+
+	if !isTxtRequest || !ok {
 		m := new(dns.Msg)
 		m.SetReply(r)
 		m.Authoritative = true
