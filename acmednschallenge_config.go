@@ -66,6 +66,9 @@ func parseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 	}
 
 	cfg.managedDomains = make(map[string][]string)
+	for _, z := range zones {
+		cfg.managedDomains[z] = []string{}
+	}
 
 	c.Next() // skip "acmednschallenge" before the block
 	for c.NextBlock() {
