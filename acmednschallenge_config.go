@@ -35,12 +35,12 @@ func parseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 	cfg := &ACMEChallengeConfig{
 		certSavePath:             defaultCertSavePath,
 		renewBeforeDays:          defaultRenewBeforeDays,
-		dnsTTL:                   60,
+		dnsTTL:                   120,
 		useLetsEncryptTestServer: false,
 		acceptedLetsEncryptToS:   false,
 		customNameservers:        []string{},
 		certValidationInterval:   24 * time.Hour,
-		dnsTimeout:               120 * time.Second,
+		dnsTimeout:               60 * time.Second,
 	}
 
 	// Get the zone from the server block
@@ -107,7 +107,7 @@ func parseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 			if ttl < 60 || ttl > 600 {
 				return nil, c.Errf("invalid dnsTTL it must be an integer between 60 and 600 but the value is: %v", ttl)
 			}
-			cfg.renewBeforeDays = uint32(ttl)
+			cfg.dnsTTL = uint32(ttl)
 			break
 		case "additionalSans":
 			var sans []string
