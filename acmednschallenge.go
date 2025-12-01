@@ -56,10 +56,14 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 	isTxtRequest := qType == "TXT"
 	txtValues, ok := (*ac.challenges)[qName]
 
+	soa, _ := dns.NewRR(fmt.Sprintf("%s %d IN SOA %s %s 1 7200 3600 1209600 3600",
+		"@", 60, "ns1.dev2.ms-dev.ch.", "dns-hostmaster.swarm-dev2.ms-dev.ch."))
+
 	if !isTxtRequest || !ok {
 		m := new(dns.Msg)
 		m.SetReply(r)
 		m.Authoritative = true
+		m.Ns = append(m.Ns, soa)
 		_ = w.WriteMsg(m)
 		return dns.RcodeSuccess, nil
 	}
@@ -79,6 +83,7 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 			Txt: []string{txtValue},
 		}
 		m.Answer = append(m.Answer, rr)
+		m.Ns = append(m.Ns, soa)
 	}
 
 	_ = w.WriteMsg(m)
