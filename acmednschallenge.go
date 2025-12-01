@@ -70,6 +70,7 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 				},
 				Txt: []string{rr},
 			})
+			msg.Authoritative = true
 		}
 		w.WriteMsg(msg)
 	}
