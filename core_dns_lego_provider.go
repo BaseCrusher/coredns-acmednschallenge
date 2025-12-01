@@ -33,7 +33,7 @@ type coreDnsLegoProvider struct {
 
 func newCoreDnsLegoProvider(acc *ACMEChallengeConfig, challenges *map[string][]string, loggerName string) (*coreDnsLegoProvider, error) {
 	// set lego logger to coredns logger
-	acmeLogger := clog.NewWithPlugin(fmt.Sprintf("%s.lego", loggerName))
+	acmeLogger := clog.NewWithPlugin(fmt.Sprintf("%s/lego", loggerName))
 	acmeLog.Logger = &logger{logger: acmeLogger}
 
 	var privateKey crypto.PrivateKey
@@ -59,7 +59,13 @@ func newCoreDnsLegoProvider(acc *ACMEChallengeConfig, challenges *map[string][]s
 			log.Debugf("could not create file at %s", keyFile)
 			return nil, err
 		}
-		defer certOut.Close()
+
+		defer func(certOut *os.File) {
+			err := certOut.Close()
+			if err != nil {
+				log.Debugf("could not write file at %s", keyFile)
+			}
+		}(certOut)
 
 		pemKey := certcrypto.PEMBlock(privateKey)
 
@@ -68,12 +74,14 @@ func newCoreDnsLegoProvider(acc *ACMEChallengeConfig, challenges *map[string][]s
 			log.Debug("could not encode the certificate")
 			return nil, err
 		}
+		log.Infof("setup new Let's Encrypt %s", keyFile)
 	} else {
 		privateKey, err = certcrypto.ParsePEMPrivateKey(keyBytes)
 		if err != nil {
 			log.Debug("could not parse private key")
 			return nil, err
 		}
+		log.Infof("loaded existing Let's Encrypt user from %s", keyFile)
 	}
 
 	user := &AcmeUser{
@@ -104,7 +112,7 @@ func (p *coreDnsLegoProvider) Present(domain, _, keyAuth string) error {
 
 	(*p.activeChallenges)[info.EffectiveFQDN] = append((*p.activeChallenges)[info.EffectiveFQDN], info.Value)
 
-	log.Infof("added TXT '%s' record for domain '%s'", info.Value, info.EffectiveFQDN)
+	log.Infof("added TXT '%s' record for domain '%s'", info.Value, domain)
 	return nil
 }
 
