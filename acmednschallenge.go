@@ -45,48 +45,35 @@ func (ac *acmeChallenge) Name() string { return name }
 func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
 	state := request.Request{W: w, Req: r}
 
+	status, err := plugin.NextOrFailure(ac.Name(), ac.Next, ctx, w, r)
+	if status != dns.RcodeSuccess || err != nil {
+		return status, err
+	}
+
 	qName := state.QName()
 	qType := state.Type()
 
 	isAcmeChallenge := strings.HasPrefix(strings.ToLower(qName), "_acme-challenge.")
-	if !isAcmeChallenge {
-		return plugin.NextOrFailure(ac.Name(), ac.Next, ctx, w, r)
-	}
-
 	isTxtRequest := qType == "TXT"
 	txtValues, ok := (*ac.challenges)[qName]
 
-	soa, _ := dns.NewRR(fmt.Sprintf("%s %d IN SOA %s %s 1 7200 3600 1209600 3600",
-		"@", 60, "ns1.dev2.ms-dev.ch.", "dns-hostmaster.swarm-dev2.ms-dev.ch."))
-
-	if !isTxtRequest || !ok {
-		m := new(dns.Msg)
-		m.SetReply(r)
-		m.Authoritative = true
-		m.Ns = append(m.Ns, soa)
-		_ = w.WriteMsg(m)
-		return dns.RcodeSuccess, nil
-	}
-
-	m := new(dns.Msg)
-	m.SetReply(r)
-	m.Authoritative = true
-
-	for _, txtValue := range txtValues {
-		rr := &dns.TXT{
-			Hdr: dns.RR_Header{
-				Name:   dns.Fqdn(qName),
-				Rrtype: dns.TypeTXT,
-				Class:  dns.ClassINET,
-				Ttl:    ac.config.dnsTTL,
-			},
-			Txt: []string{txtValue},
+	if isAcmeChallenge && isTxtRequest && ok {
+		msg := new(dns.Msg)
+		msg.SetReply(r)
+		for _, rr := range txtValues {
+			msg.Answer = append(msg.Answer, &dns.TXT{
+				Hdr: dns.RR_Header{
+					Name:   dns.Fqdn(qName),
+					Rrtype: dns.TypeTXT,
+					Class:  dns.ClassINET,
+					Ttl:    ac.config.dnsTTL,
+				},
+				Txt: []string{rr},
+			})
 		}
-		m.Answer = append(m.Answer, rr)
-		m.Ns = append(m.Ns, soa)
+		w.WriteMsg(msg)
 	}
 
-	_ = w.WriteMsg(m)
 	return dns.RcodeSuccess, nil
 }
 
