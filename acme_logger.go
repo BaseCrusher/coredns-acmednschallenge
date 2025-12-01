@@ -16,7 +16,7 @@ func (l *logger) Print(args ...interface{}) {
 }
 
 func (l *logger) Printf(format string, args ...interface{}) {
-	args[0] = stripLogPrefix(args[0].(string))
+	format = stripLogPrefix(format)
 	l.logger.Infof(format, args...)
 }
 
@@ -31,7 +31,7 @@ func (l *logger) Fatal(args ...interface{}) {
 }
 
 func (l *logger) Fatalf(format string, args ...interface{}) {
-	args[0] = stripLogPrefix(args[0].(string))
+	format = stripLogPrefix(format)
 	l.logger.Errorf(format, args...)
 }
 
@@ -46,7 +46,7 @@ func (l *logger) Error(args ...interface{}) {
 }
 
 func (l *logger) Errorf(format string, args ...interface{}) {
-	args[0] = stripLogPrefix(args[0].(string))
+	format = stripLogPrefix(format)
 	l.logger.Errorf(format, args...)
 }
 
