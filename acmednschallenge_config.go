@@ -40,7 +40,7 @@ func parseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 		acceptedLetsEncryptToS:   false,
 		customNameservers:        []string{},
 		certValidationInterval:   24 * time.Hour,
-		dnsTimeout:               60 * time.Second,
+		dnsTimeout:               120 * time.Second,
 	}
 
 	// Get the zone from the server block
