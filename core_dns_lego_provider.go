@@ -33,7 +33,7 @@ type coreDnsLegoProvider struct {
 
 func newCoreDnsLegoProvider(acc *ACMEChallengeConfig, challenges *map[string][]string, loggerName string) (*coreDnsLegoProvider, error) {
 	// set lego logger to coredns logger
-	acmeLogger := clog.NewWithPlugin(fmt.Sprintf("%s/lego", loggerName))
+	acmeLogger := clog.NewWithPlugin(fmt.Sprintf("%s", loggerName))
 	acmeLog.Logger = &logger{logger: acmeLogger}
 
 	var privateKey crypto.PrivateKey
