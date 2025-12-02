@@ -112,6 +112,7 @@ func (ac *acmeChallenge) checkAndUpdateCertForAllDomains() {
 
 	certsPath := filepath.Join(ac.config.dataPath, "certs")
 	if err := os.MkdirAll(filepath.Dir(certsPath), os.ModePerm); err != nil {
+		log.Info("asdf")
 		log.Error("could not create directory structure")
 	}
 
