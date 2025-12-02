@@ -42,6 +42,16 @@ func newAcmeChallenge(config *ACMEChallengeConfig) (*acmeChallenge, error) {
 
 func (ac *acmeChallenge) Name() string { return name }
 
+type responseRecorder struct {
+	dns.ResponseWriter
+	Msg *dns.Msg
+}
+
+func (r *responseRecorder) WriteMsg(msg *dns.Msg) error {
+	r.Msg = msg
+	return nil // don’t write yet
+}
+
 func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
 	if ac.Next == nil {
 		log.Error("There is no further plugins configured. The ACME plugin only works if there is at least one plugin after it.")
@@ -65,17 +75,29 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 		return plugin.NextOrFailure(ac.Name(), ac.Next, ctx, w, r)
 	}
 
-	// compose the new response including Ns and Extra from the next plugin
-	dnsRes, err := plugin.NextOrFailure(ac.Name(), ac.Next, ctx, w, r)
+	// -----------------------------
+	// Capture downstream response
+	// -----------------------------
+	rec := &responseRecorder{ResponseWriter: w}
+	rcode, err := plugin.NextOrFailure(ac.Name(), ac.Next, ctx, rec, r)
 	if err != nil {
-		log.Errorf("There was an error while delegating to the next plugin: %s", err.Error())
-		return dnsRes, err
+		log.Errorf("Error delegating to next plugin: %v", err)
+		return rcode, err
 	}
 
+	// -----------------------------
+	// Merge ACME TXT answers
+	// -----------------------------
 	msg := new(dns.Msg)
-	msg.SetReply(r)
+	if rec.Msg != nil {
+		msg = rec.Msg.Copy() // copy downstream NS/Extra
+	} else {
+		msg.SetReply(r)
+	}
+
 	msg.Authoritative = true
-	for _, txtVal := range txtValues {
+
+	for _, txt := range txtValues {
 		msg.Answer = append(msg.Answer, &dns.TXT{
 			Hdr: dns.RR_Header{
 				Name:   dns.Fqdn(qName),
@@ -83,11 +105,14 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 				Class:  dns.ClassINET,
 				Ttl:    ac.config.dnsTTL,
 			},
-			Txt: []string{txtVal},
+			Txt: []string{txt},
 		})
 	}
 
-	w.WriteMsg(msg)
+	if err := w.WriteMsg(msg); err != nil {
+		log.Errorf("Failed to write merged DNS response: %v", err)
+		return dns.RcodeServerFailure, err
+	}
 
 	return dns.RcodeSuccess, nil
 }
