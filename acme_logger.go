@@ -27,17 +27,17 @@ func (l *logger) Println(args ...any) {
 
 func (l *logger) Fatal(args ...interface{}) {
 	args[0] = stripLogPrefix(args[0].(string))
-	l.logger.Error(args...)
+	l.logger.Fatal(args...)
 }
 
 func (l *logger) Fatalf(format string, args ...interface{}) {
 	format = stripLogPrefix(format)
-	l.logger.Errorf(format, args...)
+	l.logger.Fatalf(format, args...)
 }
 
 func (l *logger) Fatalln(args ...any) {
 	args[0] = stripLogPrefix(args[0].(string))
-	l.logger.Error(args...)
+	l.logger.Fatal(args...)
 }
 
 func (l *logger) Error(args ...interface{}) {
