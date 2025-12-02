@@ -92,7 +92,7 @@ func (p *coreDnsLegoProvider) getAcmeClient() (*lego.Client, error) {
 	}
 
 	if p.acmeUser.alreadyExists {
-		reg, err := client.Registration.QueryRegistration()
+		reg, err := client.Registration.ResolveAccountByKey()
 		if err != nil {
 			return nil, err
 		}
