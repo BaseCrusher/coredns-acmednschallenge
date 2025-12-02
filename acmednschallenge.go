@@ -66,8 +66,15 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 	}
 
 	// compose the new response including Ns and Extra from the next plugin
+	dnsRes, err := plugin.NextOrFailure(ac.Name(), ac.Next, ctx, w, r)
+	if err != nil {
+		log.Errorf("There was an error while delegating to the next plugin: %s", err.Error())
+		return dnsRes, err
+	}
+
 	msg := new(dns.Msg)
 	msg.SetReply(r)
+	msg.Authoritative = true
 	for _, txtVal := range txtValues {
 		msg.Answer = append(msg.Answer, &dns.TXT{
 			Hdr: dns.RR_Header{
@@ -80,13 +87,6 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 		})
 	}
 
-	dnsRes, err := plugin.NextOrFailure(ac.Name(), ac.Next, ctx, w, r)
-	if err != nil {
-		log.Errorf("There was an error while delegating to the next plugin: %s", err.Error())
-		return dnsRes, err
-	}
-
-	msg.Authoritative = true
 	w.WriteMsg(msg)
 
 	return dns.RcodeSuccess, nil
