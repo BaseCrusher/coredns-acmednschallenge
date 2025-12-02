@@ -70,21 +70,32 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 		msg.Authoritative = true
 	}
 
-	msg.Ns = append(msg.Ns, &dns.SOA{
-		Hdr: dns.RR_Header{
-			Name:   "ms-dev.ch.",
-			Rrtype: dns.TypeSOA,
-			Class:  dns.ClassINET,
-			Ttl:    ac.config.dnsTTL,
+	msg.Ns = append(msg.Ns,
+		&dns.SOA{
+			Hdr: dns.RR_Header{
+				Name:   "swarm-dev2.ms-dev.ch.", // zone apex
+				Rrtype: dns.TypeSOA,
+				Class:  dns.ClassINET,
+				Ttl:    ac.config.dnsTTL,
+			},
+			Ns:      "ns1.dev2.ms-dev.ch.",
+			Mbox:    "dns-hostmaster.swarm-dev2.ms-dev.ch.",
+			Serial:  uint32(time.Now().Unix()),
+			Refresh: 3600,
+			Retry:   600,
+			Expire:  86400,
+			Minttl:  ac.config.dnsTTL,
 		},
-		Ns:      "ns1.dev2.ms-dev.ch.",
-		Mbox:    "dns-hostmaster.swarm-dev2.ms-dev.ch.",
-		Serial:  uint32(time.Now().Unix()),
-		Refresh: 3600,
-		Retry:   600,
-		Expire:  86400,
-		Minttl:  ac.config.dnsTTL,
-	})
+		&dns.NS{
+			Hdr: dns.RR_Header{
+				Name:   "swarm-dev2.ms-dev.ch.", // zone apex
+				Rrtype: dns.TypeNS,
+				Class:  dns.ClassINET,
+				Ttl:    ac.config.dnsTTL,
+			},
+			Ns: "ns1.dev2.ms-dev.ch.",
+		},
+	)
 
 	w.WriteMsg(msg)
 
