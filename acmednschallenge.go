@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/coredns/coredns/plugin"
+	"github.com/coredns/coredns/plugin/pkg/dnstest"
 	clog "github.com/coredns/coredns/plugin/pkg/log"
 	"github.com/coredns/coredns/request"
 	"github.com/go-acme/lego/v4/certificate"
@@ -43,21 +44,43 @@ func newAcmeChallenge(config *ACMEChallengeConfig) (*acmeChallenge, error) {
 func (ac *acmeChallenge) Name() string { return name }
 
 func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
+	if ac.Next == nil {
+		log.Error("There is no further plugins configured. The ACME plugin only works if there is at least one plugin after it.")
+		return dns.RcodeRefused, nil
+	}
+
 	state := request.Request{W: w, Req: r}
 
 	qName := state.QName()
 	isAcmeChallenge := strings.HasPrefix(strings.ToLower(qName), "_acme-challenge.")
 	isTxtRequest := state.QType() == dns.TypeTXT
 
-	txtValues, ok := (*ac.challenges)[qName]
-
-	if !ok || !isAcmeChallenge || !isTxtRequest {
+	// when this has nothing to do with ACME, delegate to the next plugin
+	if !isAcmeChallenge || !isTxtRequest {
 		return plugin.NextOrFailure(ac.Name(), ac.Next, ctx, w, r)
 	}
 
+	// check if this plugin manages this txt record. if not, delegate to the next plugin
+	txtValues, ok := (*ac.challenges)[qName]
+	if (!ok) || (len(txtValues) == 0) {
+		return plugin.NextOrFailure(ac.Name(), ac.Next, ctx, w, r)
+	}
+
+	// this only happens if we have an acme challenge request. we get all the info like soa and ns from the next plugin
+	rr := dnstest.NewRecorder(w)
+	_, err := ac.Next.ServeDNS(ctx, rr, r)
+	if err != nil || rr.Msg.Answer == nil {
+		log.Errorf("There was an error while delegating the request to the next plugin: %s", err)
+		return dns.RcodeRefused, nil
+	}
+
+	// compose the new response including Ns and Extra from the next plugin
 	msg := new(dns.Msg)
 	msg.SetReply(r)
-	for _, rr := range txtValues {
+	msg.Authoritative = true
+	msg.Ns = rr.Msg.Ns
+	msg.Extra = rr.Msg.Extra
+	for _, txtVal := range txtValues {
 		msg.Answer = append(msg.Answer, &dns.TXT{
 			Hdr: dns.RR_Header{
 				Name:   dns.Fqdn(qName),
@@ -65,22 +88,9 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 				Class:  dns.ClassINET,
 				Ttl:    ac.config.dnsTTL,
 			},
-			Txt: []string{rr},
+			Txt: []string{txtVal},
 		})
-		msg.Authoritative = true
 	}
-
-	msg.Ns = append(msg.Ns,
-		&dns.NS{
-			Hdr: dns.RR_Header{
-				Name:   "swarm-dev2.ms-dev.ch.", // zone apex
-				Rrtype: dns.TypeNS,
-				Class:  dns.ClassINET,
-				Ttl:    60,
-			},
-			Ns: "ns1.dev2.ms-dev.ch.",
-		},
-	)
 
 	w.WriteMsg(msg)
 
