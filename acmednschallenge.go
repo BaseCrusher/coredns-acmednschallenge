@@ -91,7 +91,7 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 	msg := new(dns.Msg)
 	msg.Rcode = dns.RcodeSuccess
 	msg.SetReply(r)
-	msg.Authoritative = true
+	msg.Authoritative = false
 	msg.Ns = rec.Msg.Ns
 	msg.Extra = rec.Msg.Extra
 
