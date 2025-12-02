@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -43,41 +45,49 @@ func newAcmeChallenge(config *ACMEChallengeConfig) (*acmeChallenge, error) {
 func (ac *acmeChallenge) Name() string { return name }
 
 func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
+	if ac.Next == nil {
+		log.Error("There is no further plugins configured. The ACME plugin only works if there is at least one plugin after it.")
+		return dns.RcodeRefused, nil
+	}
+
 	state := request.Request{W: w, Req: r}
 
 	qName := state.QName()
-	qType := state.Type()
-	isAcmeChallenge := strings.HasPrefix(qName, "_acme-challenge.")
-	isTxtRequest := qType == "TXT"
+	qNameFqdn := dns.Fqdn(strings.ToLower(qName))
+	isAcmeChallenge := strings.HasPrefix(qNameFqdn, "_acme-challenge.")
+	isTxtRequest := state.QType() == dns.TypeTXT
 
-	if !isTxtRequest || !isAcmeChallenge {
-		log.Debug("request was not a dns challenge")
+	// when this has nothing to do with ACME, delegate to the next plugin
+	if !isAcmeChallenge || !isTxtRequest {
 		return plugin.NextOrFailure(ac.Name(), ac.Next, ctx, w, r)
 	}
 
-	txtValues, ok := (*ac.challenges)[qName]
-	if !ok {
+	// check if this plugin manages this txt record. if not, delegate to the next plugin
+	txtValues, ok := (*ac.challenges)[qNameFqdn]
+	if (!ok) || (len(txtValues) == 0) {
 		return plugin.NextOrFailure(ac.Name(), ac.Next, ctx, w, r)
 	}
 
-	m := new(dns.Msg)
-	m.SetReply(r)
-	m.Authoritative = true
+	msg := new(dns.Msg)
+	msg.Rcode = dns.RcodeSuccess
+	msg.SetReply(r)
+	msg.Authoritative = false
+	msg.CheckingDisabled = true
 
-	for _, txtValue := range txtValues {
-		rr := &dns.TXT{
+	for _, txt := range txtValues {
+		msg.Answer = append(msg.Answer, &dns.TXT{
 			Hdr: dns.RR_Header{
 				Name:   dns.Fqdn(qName),
 				Rrtype: dns.TypeTXT,
 				Class:  dns.ClassINET,
-				Ttl:    60,
+				Ttl:    ac.config.dnsTTL,
 			},
-			Txt: []string{txtValue},
-		}
-		m.Answer = append(m.Answer, rr)
+			Txt: []string{txt},
+		})
 	}
 
-	_ = w.WriteMsg(m)
+	w.WriteMsg(msg)
+
 	return dns.RcodeSuccess, nil
 }
 
@@ -98,10 +108,11 @@ func (ac *acmeChallenge) start() {
 }
 
 func (ac *acmeChallenge) checkAndUpdateCertForAllDomains() {
-	log.Info("Starting cert validation!")
+	log.Info("starting cert validation!")
 
-	if err := assertCertificateDirectoryExist(ac.config.certSavePath); err != nil {
-		log.Errorf("cannot create or access certificate directory: %s", err)
+	certsPath := filepath.Join(ac.config.dataPath, "certs")
+	if err := os.MkdirAll(certsPath, os.ModePerm); err != nil {
+		log.Errorf("could not create certificates directory at %s: %v", certsPath, err)
 		return
 	}
 
@@ -111,13 +122,13 @@ func (ac *acmeChallenge) checkAndUpdateCertForAllDomains() {
 		go func(d string) {
 			defer wg.Done()
 
-			isNew, certs, err := ac.checkAndCreateOrRenewCert(d)
+			isNew, certs, err := ac.checkAndCreateOrRenewCert(certsPath, d)
 			if err != nil {
 				log.Error(err)
 				return
 			}
 			if isNew {
-				saveCerts(ac.config.certSavePath, certs)
+				saveCerts(certsPath, certs)
 			} else {
 				log.Infof("Certificate for domain '%s' is still valid, do nothing", d)
 			}
@@ -127,8 +138,8 @@ func (ac *acmeChallenge) checkAndUpdateCertForAllDomains() {
 	wg.Wait()
 }
 
-func (ac *acmeChallenge) checkAndCreateOrRenewCert(domain string) (bool, *certificate.Resource, error) {
-	certs := getSavedCert(ac.config.certSavePath, domain)
+func (ac *acmeChallenge) checkAndCreateOrRenewCert(certsPath string, domain string) (bool, *certificate.Resource, error) {
+	certs := getSavedCert(certsPath, domain)
 	if certs == nil {
 		log.Infof("No certificate found for %s, obtaining new one", domain)
 		certs, err := ac.coreDNSProvider.obtainNewCertificate(domain)

@@ -7,9 +7,10 @@ import (
 )
 
 type AcmeUser struct {
-	Email        string
-	Registration *registration.Resource
-	key          crypto.PrivateKey
+	Email         string
+	Registration  *registration.Resource
+	Key           crypto.PrivateKey
+	alreadyExists bool
 }
 
 func (u *AcmeUser) GetEmail() string {
@@ -19,5 +20,5 @@ func (u *AcmeUser) GetRegistration() *registration.Resource {
 	return u.Registration
 }
 func (u *AcmeUser) GetPrivateKey() crypto.PrivateKey {
-	return u.key
+	return u.Key
 }

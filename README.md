@@ -29,22 +29,24 @@ make
 ```
 example.com:53 {
     acmednschallenge {
-        certSavePath <path_to_cert_folder>
+        dataPath <path_to_data_folder>
         email test@test.com
         acceptedLetsEncryptToS
         useLetsEncryptTestServer
         additionalSans *.example.com
         renewBeforeDays 20
         certValidationInterval 24h
+        dnsTimeout 60s
+        dnsTTL 60
         customCAD https://localhost:14000/dir
         allowInsecureCAD
         customNameservers 127.0.0.1:53
     }
 }
 ```
-- `certSavePath`
+- `dataPath`
   - Required. String
-  - Absolute path to save the certificate.
+  - Absolute path where the plugin will save acme user data the certificates.
 - `email`
     - Required. String
     - The email used for Let'sEncrypt API.
@@ -72,6 +74,12 @@ example.com:53 {
 - `customNameservers` 
   - Optional. String list
   - Custom nameservers to use when lego makes a precheck for the records. (For development purposes only)
+- `dnsTimeout`
+  - Optional. Interval in go format [Duration](https://pkg.go.dev/time#ParseDuration). Default: 60s
+    - Timeout for DNS Propagation.
+- `dnsTTL`
+    - Optional. Int between 60 and 600. Default: 60
+        - TTL of the TXT record used for DNS challenge.
 
 #### Basic example
 ```

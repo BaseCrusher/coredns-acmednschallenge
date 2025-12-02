@@ -10,17 +10,6 @@ import (
 	"github.com/go-acme/lego/v4/certificate"
 )
 
-func assertCertificateDirectoryExist(path string) error {
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		err := os.MkdirAll(path, os.ModePerm)
-		if err != nil {
-			return fmt.Errorf("error creating directory: %s", err)
-		}
-		log.Infof("Created directory: %s", path)
-	}
-	return nil
-}
-
 func toCertFileName(domain string) string {
 	return fmt.Sprintf("%s.pem", domain)
 }

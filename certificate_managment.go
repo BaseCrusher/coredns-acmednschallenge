@@ -46,7 +46,7 @@ func (p *coreDnsLegoProvider) obtainNewCertificate(mainDomain string) (*certific
 
 	r := certificate.ObtainRequest{
 		Domains: domains,
-		Bundle:  true,
+		Bundle:  len(domains) > 1,
 	}
 
 	certificates, err := client.Certificate.Obtain(r)
@@ -79,21 +79,31 @@ func (p *coreDnsLegoProvider) getAcmeClient() (*lego.Client, error) {
 		return nil, err
 	}
 
+	dnsTimeout := dns01.AddDNSTimeout(p.dnsTimeout)
+
 	if len(p.customNameservers) < 1 {
-		err = client.Challenge.SetDNS01Provider(p)
+		err = client.Challenge.SetDNS01Provider(p, dnsTimeout)
 	} else {
-		err = client.Challenge.SetDNS01Provider(p, dns01.AddRecursiveNameservers(p.customNameservers))
+		err = client.Challenge.SetDNS01Provider(p, dnsTimeout, dns01.AddRecursiveNameservers(p.customNameservers))
 	}
 
 	if err != nil {
 		return nil, err
 	}
 
-	reg, err := client.Registration.Register(registration.RegisterOptions{TermsOfServiceAgreed: p.acceptedLetsEncryptToS})
-	if err != nil {
-		return nil, err
+	if p.acmeUser.alreadyExists {
+		reg, err := client.Registration.ResolveAccountByKey()
+		if err != nil {
+			return nil, err
+		}
+		p.acmeUser.Registration = reg
+	} else {
+		reg, err := client.Registration.Register(registration.RegisterOptions{TermsOfServiceAgreed: p.acceptedLetsEncryptToS})
+		if err != nil {
+			return nil, err
+		}
+		p.acmeUser.Registration = reg
 	}
-	p.acmeUser.Registration = reg
 
 	return client, nil
 }
