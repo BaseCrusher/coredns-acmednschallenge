@@ -29,7 +29,7 @@ make
 ```
 example.com:53 {
     acmednschallenge {
-        certSavePath <path_to_cert_folder>
+        dataPath <path_to_data_folder>
         email test@test.com
         acceptedLetsEncryptToS
         useLetsEncryptTestServer
@@ -44,9 +44,9 @@ example.com:53 {
     }
 }
 ```
-- `certSavePath`
+- `dataPath`
   - Required. String
-  - Absolute path to save the certificate.
+  - Absolute path where the plugin will save acme user data the certificates.
 - `email`
     - Required. String
     - The email used for Let'sEncrypt API.

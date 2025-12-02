@@ -108,7 +108,7 @@ func (ac *acmeChallenge) start() {
 func (ac *acmeChallenge) checkAndUpdateCertForAllDomains() {
 	log.Info("starting cert validation!")
 
-	if err := assertCertificateDirectoryExist(ac.config.certSavePath); err != nil {
+	if err := assertCertificateDirectoryExist(ac.config.dataPath); err != nil {
 		log.Errorf("cannot create or access certificate directory: %s", err)
 		return
 	}
@@ -125,7 +125,7 @@ func (ac *acmeChallenge) checkAndUpdateCertForAllDomains() {
 				return
 			}
 			if isNew {
-				saveCerts(ac.config.certSavePath, certs)
+				saveCerts(ac.config.dataPath, certs)
 			} else {
 				log.Infof("Certificate for domain '%s' is still valid, do nothing", d)
 			}
@@ -136,7 +136,7 @@ func (ac *acmeChallenge) checkAndUpdateCertForAllDomains() {
 }
 
 func (ac *acmeChallenge) checkAndCreateOrRenewCert(domain string) (bool, *certificate.Resource, error) {
-	certs := getSavedCert(ac.config.certSavePath, domain)
+	certs := getSavedCert(ac.config.dataPath, domain)
 	if certs == nil {
 		log.Infof("No certificate found for %s, obtaining new one", domain)
 		certs, err := ac.coreDNSProvider.obtainNewCertificate(domain)

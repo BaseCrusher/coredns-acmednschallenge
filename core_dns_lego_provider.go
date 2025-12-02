@@ -39,7 +39,7 @@ func newCoreDnsLegoProvider(acc *ACMEChallengeConfig, challenges *map[string][]s
 
 	var privateKey crypto.PrivateKey
 
-	keyFile := filepath.Join(acc.certSavePath, "acc.key")
+	keyFile := filepath.Join(acc.dataPath, "users", fmt.Sprintf("%s.key.pem", acc.email))
 	keyBytes, err := os.ReadFile(keyFile)
 	alreadyExists := false
 
@@ -50,7 +50,7 @@ func newCoreDnsLegoProvider(acc *ACMEChallengeConfig, challenges *map[string][]s
 			return nil, err
 		}
 
-		err = os.MkdirAll(acc.certSavePath, os.ModePerm)
+		err = os.MkdirAll(acc.dataPath, os.ModePerm)
 		if err != nil {
 			log.Debugf("could not write user.json. err: %s", err)
 			return nil, errors.New("could not write user.json")

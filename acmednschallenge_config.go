@@ -17,7 +17,7 @@ const defaultRenewBeforeDays = 10
 
 //goland:noinspection GoNameStartsWithPackageName
 type ACMEChallengeConfig struct {
-	certSavePath             string
+	dataPath                 string
 	managedDomains           map[string][]string
 	renewBeforeDays          uint32
 	useLetsEncryptTestServer bool
@@ -33,7 +33,7 @@ type ACMEChallengeConfig struct {
 
 func parseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 	cfg := &ACMEChallengeConfig{
-		certSavePath:             defaultCertSavePath,
+		dataPath:                 defaultCertSavePath,
 		renewBeforeDays:          defaultRenewBeforeDays,
 		dnsTTL:                   120,
 		useLetsEncryptTestServer: false,
@@ -73,15 +73,15 @@ func parseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 	c.Next() // skip "acmednschallenge" before the block
 	for c.NextBlock() {
 		switch c.Val() {
-		case "certSavePath":
+		case "dataPath":
 			if !c.NextArg() {
 				return nil, c.ArgErr()
 			}
 			p := c.Val()
 			if !filepath.IsAbs(p) {
-				return nil, c.Errf("certSavePath must be an absolut path: %v", p)
+				return nil, c.Errf("dataPath must be an absolut path: %v", p)
 			}
-			cfg.certSavePath = p
+			cfg.dataPath = p
 			break
 		case "renewBeforeDays":
 			if !c.NextArg() {
