@@ -42,16 +42,6 @@ func newAcmeChallenge(config *ACMEChallengeConfig) (*acmeChallenge, error) {
 
 func (ac *acmeChallenge) Name() string { return name }
 
-type responseRecorder struct {
-	dns.ResponseWriter
-	Msg *dns.Msg
-}
-
-func (r *responseRecorder) WriteMsg(msg *dns.Msg) error {
-	r.Msg = msg
-	return nil // don’t write yet
-}
-
 func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
 	if ac.Next == nil {
 		log.Error("There is no further plugins configured. The ACME plugin only works if there is at least one plugin after it.")
@@ -76,25 +66,10 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 		return plugin.NextOrFailure(ac.Name(), ac.Next, ctx, w, r)
 	}
 
-	// -----------------------------
-	// Capture downstream response
-	// -----------------------------
-	rec := &responseRecorder{ResponseWriter: w}
-	rcode, err := plugin.NextOrFailure(ac.Name(), ac.Next, ctx, rec, r)
-	if err != nil {
-		log.Infof("Error delegating to next plugin: %v", err)
-		return rcode, err
-	}
-
-	// -----------------------------
-	// Merge ACME TXT answers
-	// -----------------------------
 	msg := new(dns.Msg)
 	msg.Rcode = dns.RcodeSuccess
 	msg.SetReply(r)
 	msg.Authoritative = false
-	msg.Ns = rec.Msg.Ns
-	msg.Extra = rec.Msg.Extra
 	msg.CheckingDisabled = true
 
 	for _, txt := range txtValues {
@@ -109,10 +84,7 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 		})
 	}
 
-	if err := w.WriteMsg(msg); err != nil {
-		log.Infof("Failed to write merged DNS response: %v", err)
-		return dns.RcodeServerFailure, err
-	}
+	w.WriteMsg(msg)
 
 	return dns.RcodeSuccess, nil
 }
