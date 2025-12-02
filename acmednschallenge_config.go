@@ -17,7 +17,7 @@ const defaultRenewBeforeDays = 10
 
 //goland:noinspection GoNameStartsWithPackageName
 type ACMEChallengeConfig struct {
-	certSavePath             string
+	dataPath                 string
 	managedDomains           map[string][]string
 	renewBeforeDays          uint32
 	useLetsEncryptTestServer bool
@@ -26,17 +26,21 @@ type ACMEChallengeConfig struct {
 	customCAD                string
 	allowInsecureCAD         bool
 	customNameservers        []string
+	dnsTimeout               time.Duration
+	dnsTTL                   uint32
 	certValidationInterval   time.Duration
 }
 
 func parseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 	cfg := &ACMEChallengeConfig{
-		certSavePath:             defaultCertSavePath,
+		dataPath:                 defaultCertSavePath,
 		renewBeforeDays:          defaultRenewBeforeDays,
+		dnsTTL:                   120,
 		useLetsEncryptTestServer: false,
 		acceptedLetsEncryptToS:   false,
 		customNameservers:        []string{},
 		certValidationInterval:   24 * time.Hour,
+		dnsTimeout:               60 * time.Second,
 	}
 
 	// Get the zone from the server block
@@ -62,19 +66,22 @@ func parseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 	}
 
 	cfg.managedDomains = make(map[string][]string)
+	for _, z := range zones {
+		cfg.managedDomains[z] = []string{}
+	}
 
 	c.Next() // skip "acmednschallenge" before the block
 	for c.NextBlock() {
 		switch c.Val() {
-		case "certSavePath":
+		case "dataPath":
 			if !c.NextArg() {
 				return nil, c.ArgErr()
 			}
 			p := c.Val()
 			if !filepath.IsAbs(p) {
-				return nil, c.Errf("certSavePath must be an absolut path: %v", p)
+				return nil, c.Errf("dataPath must be an absolut path: %v", p)
 			}
-			cfg.certSavePath = p
+			cfg.dataPath = p
 			break
 		case "renewBeforeDays":
 			if !c.NextArg() {
@@ -82,12 +89,25 @@ func parseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 			}
 			renewBeforeDays, err := strconv.ParseUint(c.Val(), 10, 32)
 			if err != nil {
-				return nil, c.Errf("invalid RenewBeforeDays it must be an integer between 1 and 30 but the value is: %v", c.Val())
+				return nil, c.Errf("invalid renewBeforeDays it must be an integer between 1 and 30 but the value is: %v", c.Val())
 			}
 			if renewBeforeDays < 1 || renewBeforeDays > 30 {
-				return nil, c.Errf("invalid RenewBeforeDays it must be an integer between 1 and 30 but the value is: %v", renewBeforeDays)
+				return nil, c.Errf("invalid renewBeforeDays it must be an integer between 1 and 30 but the value is: %v", renewBeforeDays)
 			}
 			cfg.renewBeforeDays = uint32(renewBeforeDays)
+			break
+		case "dnsTTL":
+			if !c.NextArg() {
+				return nil, c.ArgErr()
+			}
+			ttl, err := strconv.ParseUint(c.Val(), 10, 32)
+			if err != nil {
+				return nil, c.Errf("invalid dnsTTL it must be an integer between 60 and 600 but the value is: %v", c.Val())
+			}
+			if ttl < 60 || ttl > 600 {
+				return nil, c.Errf("invalid dnsTTL it must be an integer between 60 and 600 but the value is: %v", ttl)
+			}
+			cfg.dnsTTL = uint32(ttl)
 			break
 		case "additionalSans":
 			var sans []string
@@ -153,6 +173,16 @@ func parseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 			}
 			cfg.customNameservers = nameservers
 		case "certValidationInterval":
+			if !c.NextArg() {
+				return nil, c.ArgErr()
+			}
+			duration := c.Val()
+			d, err := time.ParseDuration(duration)
+			if err != nil {
+				return nil, c.Errf("invalid certValidationInterval: %v", duration)
+			}
+			cfg.certValidationInterval = d
+		case "dnsTimeout":
 			if !c.NextArg() {
 				return nil, c.ArgErr()
 			}
