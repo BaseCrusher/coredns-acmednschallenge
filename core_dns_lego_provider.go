@@ -40,7 +40,6 @@ func newCoreDnsLegoProvider(acc *ACMEChallengeConfig, challenges *map[string][]s
 	var privateKey crypto.PrivateKey
 
 	keyFile := filepath.Join(acc.dataPath, "users", acc.email, "key.pem")
-
 	if err := os.MkdirAll(filepath.Dir(keyFile), os.ModePerm); err != nil {
 		log.Debug("could not create directory structure")
 		return nil, err

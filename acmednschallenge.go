@@ -111,9 +111,9 @@ func (ac *acmeChallenge) checkAndUpdateCertForAllDomains() {
 	log.Info("starting cert validation!")
 
 	certsPath := filepath.Join(ac.config.dataPath, "certs")
-	if err := os.MkdirAll(filepath.Dir(certsPath), os.ModePerm); err != nil {
-		log.Info("asdf")
-		log.Error("could not create directory structure")
+	if err := os.MkdirAll(certsPath, os.ModePerm); err != nil {
+		log.Errorf("could not create certificates directory at %s: %v", certsPath, err)
+		return
 	}
 
 	var wg sync.WaitGroup
