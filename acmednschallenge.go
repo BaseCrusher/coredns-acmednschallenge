@@ -110,13 +110,7 @@ func (ac *acmeChallenge) start() {
 func (ac *acmeChallenge) checkAndUpdateCertForAllDomains() {
 	log.Info("starting cert validation!")
 
-	if err := assertCertificateDirectoryExist(ac.config.dataPath); err != nil {
-		log.Errorf("cannot create or access certificate directory: %s", err)
-		return
-	}
-
 	certsPath := filepath.Join(ac.config.dataPath, "certs")
-
 	if err := os.MkdirAll(filepath.Dir(certsPath), os.ModePerm); err != nil {
 		log.Error("could not create directory structure")
 	}
