@@ -61,7 +61,8 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 	state := request.Request{W: w, Req: r}
 
 	qName := state.QName()
-	isAcmeChallenge := strings.HasPrefix(strings.ToLower(qName), "_acme-challenge.")
+	qNameFqdn := dns.Fqdn(strings.ToLower(qName))
+	isAcmeChallenge := strings.HasPrefix(qNameFqdn, "_acme-challenge.")
 	isTxtRequest := state.QType() == dns.TypeTXT
 
 	// when this has nothing to do with ACME, delegate to the next plugin
@@ -70,7 +71,7 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 	}
 
 	// check if this plugin manages this txt record. if not, delegate to the next plugin
-	txtValues, ok := (*ac.challenges)[qName]
+	txtValues, ok := (*ac.challenges)[qNameFqdn]
 	if (!ok) || (len(txtValues) == 0) {
 		return plugin.NextOrFailure(ac.Name(), ac.Next, ctx, w, r)
 	}

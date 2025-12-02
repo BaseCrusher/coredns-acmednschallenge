@@ -16,6 +16,7 @@ import (
 	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	acmeLog "github.com/go-acme/lego/v4/log"
+	"github.com/miekg/dns"
 )
 
 type coreDnsLegoProvider struct {
@@ -106,11 +107,12 @@ func newCoreDnsLegoProvider(acc *ACMEChallengeConfig, challenges *map[string][]s
 
 func (p *coreDnsLegoProvider) Present(domain, _, keyAuth string) error {
 	info := dns01.GetChallengeInfo(domain, keyAuth)
-	if (*p.activeChallenges)[info.EffectiveFQDN] == nil {
-		(*p.activeChallenges)[info.EffectiveFQDN] = []string{}
+	fdqn := dns.Fqdn(info.EffectiveFQDN)
+	if (*p.activeChallenges)[fdqn] == nil {
+		(*p.activeChallenges)[fdqn] = []string{}
 	}
 
-	(*p.activeChallenges)[info.EffectiveFQDN] = append((*p.activeChallenges)[info.EffectiveFQDN], info.Value)
+	(*p.activeChallenges)[fdqn] = append((*p.activeChallenges)[fdqn], info.Value)
 
 	log.Infof("added TXT '%s' record for domain '%s'", info.Value, domain)
 	time.Sleep(1000 * time.Millisecond)
@@ -119,7 +121,8 @@ func (p *coreDnsLegoProvider) Present(domain, _, keyAuth string) error {
 
 func (p *coreDnsLegoProvider) CleanUp(domain, _, keyAuth string) error {
 	//info := dns01.GetChallengeInfo(domain, keyAuth)
-	//delete(*p.activeChallenges, info.EffectiveFQDN)
-	//log.Infof("removed TXT '%s' record for domain '%s'", info.Value, info.EffectiveFQDN)
+	//fdqn := dns.Fqdn(info.EffectiveFQDN)
+	//delete(*p.activeChallenges, fdqn)
+	//log.Infof("removed TXT '%s' record for domain '%s'", info.Value, fdqn)
 	return nil
 }
