@@ -89,14 +89,11 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 	// Merge ACME TXT answers
 	// -----------------------------
 	msg := new(dns.Msg)
-	if rec.Msg != nil {
-		msg = rec.Msg.Copy() // copy downstream NS/Extra
-	} else {
-		msg.SetReply(r)
-	}
-
 	msg.Rcode = dns.RcodeSuccess
+	msg.SetReply(r)
 	msg.Authoritative = true
+	msg.Ns = rec.Msg.Ns
+	msg.Extra = rec.Msg.Extra
 
 	for _, txt := range txtValues {
 		msg.Answer = append(msg.Answer, &dns.TXT{
