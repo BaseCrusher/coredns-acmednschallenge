@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -113,19 +115,25 @@ func (ac *acmeChallenge) checkAndUpdateCertForAllDomains() {
 		return
 	}
 
+	certsPath := filepath.Join(ac.config.dataPath, "certs")
+
+	if err := os.MkdirAll(filepath.Dir(certsPath), os.ModePerm); err != nil {
+		log.Error("could not create directory structure")
+	}
+
 	var wg sync.WaitGroup
 	for domain := range maps.Keys(ac.config.managedDomains) {
 		wg.Add(1)
 		go func(d string) {
 			defer wg.Done()
 
-			isNew, certs, err := ac.checkAndCreateOrRenewCert(d)
+			isNew, certs, err := ac.checkAndCreateOrRenewCert(certsPath, d)
 			if err != nil {
 				log.Error(err)
 				return
 			}
 			if isNew {
-				saveCerts(ac.config.dataPath, certs)
+				saveCerts(certsPath, certs)
 			} else {
 				log.Infof("Certificate for domain '%s' is still valid, do nothing", d)
 			}
@@ -135,8 +143,8 @@ func (ac *acmeChallenge) checkAndUpdateCertForAllDomains() {
 	wg.Wait()
 }
 
-func (ac *acmeChallenge) checkAndCreateOrRenewCert(domain string) (bool, *certificate.Resource, error) {
-	certs := getSavedCert(ac.config.dataPath, domain)
+func (ac *acmeChallenge) checkAndCreateOrRenewCert(certsPath string, domain string) (bool, *certificate.Resource, error) {
+	certs := getSavedCert(certsPath, domain)
 	if certs == nil {
 		log.Infof("No certificate found for %s, obtaining new one", domain)
 		certs, err := ac.coreDNSProvider.obtainNewCertificate(domain)

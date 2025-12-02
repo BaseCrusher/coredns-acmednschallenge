@@ -41,7 +41,6 @@ func newCoreDnsLegoProvider(acc *ACMEChallengeConfig, challenges *map[string][]s
 
 	keyFile := filepath.Join(acc.dataPath, "users", acc.email, "key.pem")
 
-	// Ensure directory exists
 	if err := os.MkdirAll(filepath.Dir(keyFile), os.ModePerm); err != nil {
 		log.Debug("could not create directory structure")
 		return nil, err
