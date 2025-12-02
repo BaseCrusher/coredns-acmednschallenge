@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/coredns/coredns/plugin"
-	"github.com/coredns/coredns/plugin/pkg/dnstest"
 	clog "github.com/coredns/coredns/plugin/pkg/log"
 	"github.com/coredns/coredns/request"
 	"github.com/go-acme/lego/v4/certificate"
@@ -66,20 +65,9 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 		return plugin.NextOrFailure(ac.Name(), ac.Next, ctx, w, r)
 	}
 
-	// this only happens if we have an acme challenge request. we get all the info like soa and ns from the next plugin
-	rr := dnstest.NewRecorder(w)
-	_, err := ac.Next.ServeDNS(ctx, rr, r)
-	if err != nil || rr.Msg.Answer == nil {
-		log.Errorf("There was an error while delegating the request to the next plugin: %s", err)
-		return dns.RcodeRefused, nil
-	}
-
 	// compose the new response including Ns and Extra from the next plugin
 	msg := new(dns.Msg)
 	msg.SetReply(r)
-	msg.Authoritative = true
-	msg.Ns = rr.Msg.Ns
-	msg.Extra = rr.Msg.Extra
 	for _, txtVal := range txtValues {
 		msg.Answer = append(msg.Answer, &dns.TXT{
 			Hdr: dns.RR_Header{
@@ -92,6 +80,13 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 		})
 	}
 
+	dnsRes, err := plugin.NextOrFailure(ac.Name(), ac.Next, ctx, w, r)
+	if err != nil {
+		log.Errorf("There was an error while delegating to the next plugin: %s", err.Error())
+		return dnsRes, err
+	}
+
+	msg.Authoritative = true
 	w.WriteMsg(msg)
 
 	return dns.RcodeSuccess, nil
