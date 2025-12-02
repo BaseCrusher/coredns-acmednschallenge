@@ -94,6 +94,7 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 	msg.Authoritative = false
 	msg.Ns = rec.Msg.Ns
 	msg.Extra = rec.Msg.Extra
+	msg.CheckingDisabled = true
 
 	for _, txt := range txtValues {
 		msg.Answer = append(msg.Answer, &dns.TXT{
