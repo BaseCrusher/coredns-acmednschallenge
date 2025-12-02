@@ -81,7 +81,7 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 	rec := &responseRecorder{ResponseWriter: w}
 	rcode, err := plugin.NextOrFailure(ac.Name(), ac.Next, ctx, rec, r)
 	if err != nil {
-		log.Errorf("Error delegating to next plugin: %v", err)
+		log.Infof("Error delegating to next plugin: %v", err)
 		return rcode, err
 	}
 
@@ -110,7 +110,7 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 	}
 
 	if err := w.WriteMsg(msg); err != nil {
-		log.Errorf("Failed to write merged DNS response: %v", err)
+		log.Infof("Failed to write merged DNS response: %v", err)
 		return dns.RcodeServerFailure, err
 	}
 
