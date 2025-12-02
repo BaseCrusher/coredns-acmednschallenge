@@ -41,6 +41,7 @@ func newCoreDnsLegoProvider(acc *ACMEChallengeConfig, challenges *map[string][]s
 
 	keyFile := filepath.Join(acc.certSavePath, "acc.key")
 	keyBytes, err := os.ReadFile(keyFile)
+	alreadyExists := false
 
 	if err != nil {
 		privateKey, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -83,11 +84,13 @@ func newCoreDnsLegoProvider(acc *ACMEChallengeConfig, challenges *map[string][]s
 			return nil, err
 		}
 		log.Infof("loaded existing Let's Encrypt user from %s", keyFile)
+		alreadyExists = true
 	}
 
 	user := &AcmeUser{
-		Email: acc.email,
-		Key:   privateKey,
+		Email:         acc.email,
+		Key:           privateKey,
+		alreadyExists: alreadyExists,
 	}
 
 	provider := &coreDnsLegoProvider{
@@ -115,14 +118,13 @@ func (p *coreDnsLegoProvider) Present(domain, _, keyAuth string) error {
 	(*p.activeChallenges)[fdqn] = append((*p.activeChallenges)[fdqn], info.Value)
 
 	log.Infof("added TXT '%s' record for domain '%s'", info.Value, domain)
-	time.Sleep(1000 * time.Millisecond)
 	return nil
 }
 
 func (p *coreDnsLegoProvider) CleanUp(domain, _, keyAuth string) error {
-	//info := dns01.GetChallengeInfo(domain, keyAuth)
-	//fdqn := dns.Fqdn(info.EffectiveFQDN)
-	//delete(*p.activeChallenges, fdqn)
-	//log.Infof("removed TXT '%s' record for domain '%s'", info.Value, fdqn)
+	info := dns01.GetChallengeInfo(domain, keyAuth)
+	fdqn := dns.Fqdn(info.EffectiveFQDN)
+	delete(*p.activeChallenges, fdqn)
+	log.Infof("removed TXT '%s' record for domain '%s'", info.Value, fdqn)
 	return nil
 }

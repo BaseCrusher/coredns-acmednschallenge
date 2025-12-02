@@ -7,9 +7,10 @@ import (
 )
 
 type AcmeUser struct {
-	Email        string                 `json:"email"`
-	Registration *registration.Resource `json:"-"` // ignored
-	Key          crypto.PrivateKey      `json:"key"`
+	Email         string
+	Registration  *registration.Resource
+	Key           crypto.PrivateKey
+	alreadyExists bool
 }
 
 func (u *AcmeUser) GetEmail() string {

@@ -91,11 +91,19 @@ func (p *coreDnsLegoProvider) getAcmeClient() (*lego.Client, error) {
 		return nil, err
 	}
 
-	reg, err := client.Registration.Register(registration.RegisterOptions{TermsOfServiceAgreed: p.acceptedLetsEncryptToS})
-	if err != nil {
-		return nil, err
+	if p.acmeUser.alreadyExists {
+		reg, err := client.Registration.QueryRegistration()
+		if err != nil {
+			return nil, err
+		}
+		p.acmeUser.Registration = reg
+	} else {
+		reg, err := client.Registration.Register(registration.RegisterOptions{TermsOfServiceAgreed: p.acceptedLetsEncryptToS})
+		if err != nil {
+			return nil, err
+		}
+		p.acmeUser.Registration = reg
 	}
-	p.acmeUser.Registration = reg
 
 	return client, nil
 }
