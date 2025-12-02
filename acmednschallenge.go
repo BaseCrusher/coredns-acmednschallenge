@@ -72,7 +72,7 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 
 	msg.Ns = append(msg.Ns, &dns.SOA{
 		Hdr: dns.RR_Header{
-			Name:   "swarm-dev2.ms-dev.ch.",
+			Name:   "_acme-challenge.swarm-dev2.ms-dev.ch.",
 			Rrtype: dns.TypeSOA,
 			Class:  dns.ClassINET,
 			Ttl:    ac.config.dnsTTL,
