@@ -128,7 +128,7 @@ func (ac *acmeChallenge) checkAndUpdateCertForAllDomains() {
 				return
 			}
 			if isNew {
-				saveCerts(certsPath, certs)
+				saveCerts(certsPath, certs, ac.config.privateKeyFileMode)
 			} else {
 				log.Infof("Certificate for domain '%s' is still valid, do nothing", d)
 			}
