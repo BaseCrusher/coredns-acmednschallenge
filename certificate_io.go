@@ -22,7 +22,8 @@ func saveCerts(certSavePath string, certs *certificate.Resource, privateKeyPermi
 	keyPath := filepath.Join(certSavePath, toKeyFileName(certs.Domain))
 	writeCert(certs.PrivateKey, keyPath, privateKeyPermission)
 
-	fullCertChain := append(certs.Certificate, certs.IssuerCertificate...)
+	fullCertChain := append(certs.Certificate, '\n')
+	fullCertChain = append(fullCertChain, certs.IssuerCertificate...)
 	certPath := filepath.Join(certSavePath, toCertFileName(certs.Domain))
 	writeCert(fullCertChain, certPath, 0644)
 }
@@ -47,7 +48,7 @@ func writeCert(content []byte, path string, permission os.FileMode) {
 	log.Infof("Successfully wrote to %s", file.Name())
 }
 
-func getSavedCert(certSavePath string, domain string) *certificate.Resource {
+func getSavedCert(certSavePath string, domain string, privateKeyPermission os.FileMode) *certificate.Resource {
 	certFile := filepath.Join(certSavePath, toCertFileName(domain))
 	keyFile := filepath.Join(certSavePath, toKeyFileName(domain))
 
@@ -64,7 +65,7 @@ func getSavedCert(certSavePath string, domain string) *certificate.Resource {
 	if info, err := os.Stat(certFile); err == nil && info.Mode().Perm() != 0o644 {
 		return nil
 	}
-	if info, err := os.Stat(keyFile); err == nil && info.Mode().Perm() != 0o600 {
+	if info, err := os.Stat(keyFile); err == nil && info.Mode().Perm() != privateKeyPermission {
 		return nil
 	}
 
