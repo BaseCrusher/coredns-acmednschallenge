@@ -53,6 +53,9 @@ example.com:53 {
 - `acceptedLetsEncryptToS`
     - Required. Boolean. Must be set.
     - If you agree to the [Let'sEncrypt Terms of Service](https://letsencrypt.org/privacy/). By settings this you're agreeing to them.
+- `privateKeyFileMode`
+    - Optional. Int. Default: 600
+    - The file mode of the private key file. Possible values are 0600, 0640, 0644.
 - `skipDnsPropagationTest`
     - Optional. Boolean. Default: false
     - If set lego will skip the DNS propagation test.

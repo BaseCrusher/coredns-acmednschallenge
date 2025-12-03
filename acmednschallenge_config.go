@@ -3,6 +3,7 @@ package acmednschallenge
 import (
 	"net"
 	"net/mail"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -26,6 +27,7 @@ type ACMEChallengeConfig struct {
 	skipDnsPropagationTest   bool
 	customCAD                string
 	allowInsecureCAD         bool
+	privateKeyFileMode       os.FileMode
 	customNameservers        []string
 	dnsTimeout               time.Duration
 	dnsTTL                   uint32
@@ -43,6 +45,7 @@ func parseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 		customNameservers:        []string{},
 		certValidationInterval:   24 * time.Hour,
 		dnsTimeout:               60 * time.Second,
+		privateKeyFileMode:       os.FileMode(0600),
 	}
 
 	// Get the zone from the server block
@@ -85,6 +88,15 @@ func parseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 			}
 			cfg.dataPath = p
 			break
+		case "privateKeyFileMode":
+			p, err := strconv.ParseUint(c.Val(), 10, 32)
+			if err != nil {
+				return nil, c.Errf("invalid privateKeyFileMode it must be 600, 640 or 644 but the value is: %v", c.Val())
+			}
+			if p != 600 && p != 640 && p != 644 {
+				return nil, c.Errf("invalid privateKeyFileMode it must be 600, 640 or 644 but the value is: %v", p)
+			}
+			cfg.renewBeforeDays = uint32(p)
 		case "renewBeforeDays":
 			if !c.NextArg() {
 				return nil, c.ArgErr()

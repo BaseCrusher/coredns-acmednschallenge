@@ -11,16 +11,16 @@ import (
 )
 
 func toCertFileName(domain string) string {
-	return fmt.Sprintf("%s.pem", domain)
+	return fmt.Sprintf("%s.crt", domain)
 }
 
 func toKeyFileName(domain string) string {
-	return fmt.Sprintf("%s.key.pem", domain)
+	return fmt.Sprintf("%s.key", domain)
 }
 
-func saveCerts(certSavePath string, certs *certificate.Resource) {
+func saveCerts(certSavePath string, certs *certificate.Resource, privateKeyPermission os.FileMode) {
 	keyPath := filepath.Join(certSavePath, toKeyFileName(certs.Domain))
-	writeCert(certs.PrivateKey, keyPath, 0600)
+	writeCert(certs.PrivateKey, keyPath, privateKeyPermission)
 
 	fullCertChain := append(certs.Certificate, certs.IssuerCertificate...)
 	certPath := filepath.Join(certSavePath, toCertFileName(certs.Domain))
