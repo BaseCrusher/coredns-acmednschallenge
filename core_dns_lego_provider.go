@@ -26,6 +26,7 @@ type coreDnsLegoProvider struct {
 	acceptedLetsEncryptToS   bool
 	managedDomains           map[string][]string
 	useLetsEncryptTestServer bool
+	skipDnsPropagationTest   bool
 	customCAD                string
 	allowInsecureCAD         bool
 	customNameservers        []string
@@ -108,6 +109,7 @@ func newCoreDnsLegoProvider(acc *ACMEChallengeConfig, challenges *map[string][]s
 		allowInsecureCAD:         acc.allowInsecureCAD,
 		customNameservers:        acc.customNameservers,
 		dnsTimeout:               acc.dnsTimeout,
+		skipDnsPropagationTest:   acc.skipDnsPropagationTest,
 	}
 
 	return provider, nil
