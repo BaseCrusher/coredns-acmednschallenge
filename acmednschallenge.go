@@ -139,7 +139,7 @@ func (ac *acmeChallenge) checkAndUpdateCertForAllDomains() {
 }
 
 func (ac *acmeChallenge) checkAndCreateOrRenewCert(certsPath string, domain string) (bool, *certificate.Resource, error) {
-	certs := getSavedCert(certsPath, domain)
+	certs := getSavedCert(certsPath, domain, ac.config.privateKeyFileMode)
 	if certs == nil {
 		log.Infof("No certificate found for %s, obtaining new one", domain)
 		certs, err := ac.coreDNSProvider.obtainNewCertificate(domain)
