@@ -53,6 +53,9 @@ example.com:53 {
 - `acceptedLetsEncryptToS`
     - Required. Boolean. Must be set.
     - If you agree to the [Let'sEncrypt Terms of Service](https://letsencrypt.org/privacy/). By settings this you're agreeing to them.
+- `skipDnsPropagationTest`
+    - Optional. Boolean. Default: false
+    - If set lego will skip the DNS propagation test.
 - `useLetsEncryptTestServer`
     - Optional. Boolean. Default: false
     - Use Let'sEncrypts test server.

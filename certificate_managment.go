@@ -81,11 +81,11 @@ func (p *coreDnsLegoProvider) getAcmeClient() (*lego.Client, error) {
 
 	dnsTimeout := dns01.AddDNSTimeout(p.dnsTimeout)
 
-	if len(p.customNameservers) < 1 {
-		err = client.Challenge.SetDNS01Provider(p, dnsTimeout)
-	} else {
-		err = client.Challenge.SetDNS01Provider(p, dnsTimeout, dns01.AddRecursiveNameservers(p.customNameservers))
-	}
+	err = client.Challenge.SetDNS01Provider(p,
+		dnsTimeout,
+		dns01.CondOption(p.skipDnsPropagationTest, dns01.DisableAuthoritativeNssPropagationRequirement()),
+		dns01.CondOption(len(p.customNameservers) > 0, dns01.AddRecursiveNameservers(p.customNameservers)),
+	)
 
 	if err != nil {
 		return nil, err

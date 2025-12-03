@@ -23,6 +23,7 @@ type ACMEChallengeConfig struct {
 	useLetsEncryptTestServer bool
 	email                    string
 	acceptedLetsEncryptToS   bool
+	skipDnsPropagationTest   bool
 	customCAD                string
 	allowInsecureCAD         bool
 	customNameservers        []string
@@ -38,6 +39,7 @@ func parseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 		dnsTTL:                   120,
 		useLetsEncryptTestServer: false,
 		acceptedLetsEncryptToS:   false,
+		skipDnsPropagationTest:   false,
 		customNameservers:        []string{},
 		certValidationInterval:   24 * time.Hour,
 		dnsTimeout:               60 * time.Second,
@@ -127,6 +129,11 @@ func parseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 				return nil, c.ArgErr()
 			}
 			cfg.useLetsEncryptTestServer = true
+		case "skipDnsPropagationTest":
+			if c.NextArg() {
+				return nil, c.ArgErr()
+			}
+			cfg.skipDnsPropagationTest = true
 		case "acceptedLetsEncryptToS":
 			if c.NextArg() {
 				return nil, c.ArgErr()
