@@ -89,6 +89,9 @@ func parseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 			cfg.dataPath = p
 			break
 		case "privateKeyFileMode":
+			if !c.NextArg() {
+				return nil, c.ArgErr()
+			}
 			p, err := strconv.ParseUint(c.Val(), 10, 32)
 			if err != nil {
 				return nil, c.Errf("invalid privateKeyFileMode it must be 600, 640 or 644 but the value is: %v", c.Val())
