@@ -234,9 +234,8 @@ func parseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 				return nil, c.ArgErr()
 			}
 			resultPath := c.Val()
-			resultDir := filepath.Dir(resultPath)
-			if err := os.MkdirAll(resultDir, 0755); err != nil {
-				return nil, c.Errf("failed to create directory for postCertificateMustacheRender resultDir: %v, Error: %v", resultDir, err)
+			if resultPath == "" {
+				return nil, c.Errf("invalid postCertificateMustacheRender. The second value must be a valid path! It may contain mustache variables, e.g. {{.Domain}}.")
 			}
 			cfg.postCertificateMustacheTemplatePath = templatePath
 			cfg.postCertificateMustacheResultPath = resultPath

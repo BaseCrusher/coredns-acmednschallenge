@@ -131,18 +131,26 @@ func (ac *acmeChallenge) checkAndUpdateCertForAllDomains() {
 			if isNew {
 				saveCerts(certsPath, certs, ac.config.privateKeyFileMode)
 				if ac.config.postCertificateMustacheTemplatePath != "" {
-					res, err := mustache.RenderFile(ac.config.postCertificateMustacheTemplatePath, map[string]string{
-						"dir": certsPath,
-						"key": getFileName(certs.Domain, ".key"),
-						"pem": getFileName(certs.Domain, ".pem"),
-					})
+					mustacheContext := map[string]string{
+						"domain": sanitizedDomain(certs.Domain),
+						"dir":    certsPath,
+						"key":    getFileName(certs.Domain, ".key"),
+						"pem":    getFileName(certs.Domain, ".pem"),
+					}
 
+					resFile, err := mustache.RenderFile(ac.config.postCertificateMustacheTemplatePath, mustacheContext)
 					if err != nil {
 						log.Errorf("Error rendering postCertificateMustacheTemplatePath: %v", err)
 						return
 					}
 
-					err = os.WriteFile(ac.config.postCertificateMustacheResultPath, []byte(res), 0644)
+					resFilePath, err := mustache.Render(ac.config.postCertificateMustacheResultPath, mustacheContext)
+					if err != nil {
+						log.Errorf("Error rendering postCertificateMustacheResultPath: %v", err)
+						return
+					}
+
+					err = os.WriteFile(resFilePath, []byte(resFile), 0644)
 					if err != nil {
 						log.Errorf("Error writing postCertificateMustacheResultPath: %v", err)
 						return
