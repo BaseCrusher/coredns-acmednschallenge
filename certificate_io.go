@@ -1,13 +1,17 @@
 package acmednschallenge
 
 import (
+	"bytes"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/go-acme/lego/v4/certificate"
+	"golang.org/x/net/idna"
 )
 
 func toCertFileName(domain string) string {
@@ -18,37 +22,21 @@ func toKeyFileName(domain string) string {
 	return fmt.Sprintf("%s.key", domain)
 }
 
-func saveCerts(certSavePath string, certs *certificate.Resource, privateKeyPermission os.FileMode) {
-	keyPath := filepath.Join(certSavePath, toKeyFileName(certs.Domain))
-	writeCert(certs.PrivateKey, keyPath, privateKeyPermission)
-
-	fullCertChain := append(certs.Certificate, '\n')
-	fullCertChain = append(fullCertChain, certs.IssuerCertificate...)
-	certPath := filepath.Join(certSavePath, toCertFileName(certs.Domain))
-	writeCert(fullCertChain, certPath, 0644)
-}
-
-func writeCert(content []byte, path string, permission os.FileMode) {
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, permission)
+func saveCerts(certSavePath string, certs *certificate.Resource, privateKeyPermission fs.FileMode) {
+	err := writeFile(certSavePath, certs.Domain, ".key", privateKeyPermission, certs.PrivateKey)
 	if err != nil {
-		log.Errorf("Error creating file: %s", err)
-		return
-	}
-	defer func() {
-		if cert := file.Close(); cert != nil {
-			log.Errorf("Error closing file %s: %s", file.Name(), cert)
-		}
-	}()
-
-	if _, err := file.Write(content); err != nil {
-		log.Errorf("Error writing to file: %s", err)
+		log.Errorf("unable to save key file: %s", err)
 		return
 	}
 
-	log.Infof("Successfully wrote to %s", file.Name())
+	err = writeFile(certSavePath, certs.Domain, ".pem", privateKeyPermission, bytes.Join([][]byte{certs.Certificate, certs.PrivateKey}, nil))
+	if err != nil {
+		log.Errorf("unable to save PEM file: %s", err)
+		return
+	}
 }
 
-func getSavedCert(certSavePath string, domain string, privateKeyPermission os.FileMode) *certificate.Resource {
+func getSavedCert(certSavePath string, domain string) *certificate.Resource {
 	certFile := filepath.Join(certSavePath, toCertFileName(domain))
 	keyFile := filepath.Join(certSavePath, toKeyFileName(domain))
 
@@ -59,13 +47,6 @@ func getSavedCert(certSavePath string, domain string, privateKeyPermission os.Fi
 
 	keyPEM, err := os.ReadFile(keyFile)
 	if err != nil {
-		return nil
-	}
-
-	if info, err := os.Stat(certFile); err == nil && info.Mode().Perm() != 0o644 {
-		return nil
-	}
-	if info, err := os.Stat(keyFile); err == nil && info.Mode().Perm() != privateKeyPermission {
 		return nil
 	}
 
@@ -82,4 +63,20 @@ func getSavedCert(certSavePath string, domain string, privateKeyPermission os.Fi
 		Certificate: certPEM,
 		PrivateKey:  keyPEM,
 	}
+}
+
+func writeFile(certSavePath string, domain, extension string, permission fs.FileMode, data []byte) error {
+	baseFileName := sanitizedDomain(domain)
+	filePath := filepath.Join(certSavePath, baseFileName+extension)
+
+	return os.WriteFile(filePath, data, permission)
+}
+
+func sanitizedDomain(domain string) string {
+	safe, err := idna.ToASCII(strings.NewReplacer(":", "-", "*", "_").Replace(domain))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return safe
 }
