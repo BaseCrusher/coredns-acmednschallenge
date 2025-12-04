@@ -33,6 +33,8 @@ example.com:53 {
         email test@test.com
         acceptedLetsEncryptToS
         useLetsEncryptTestServer
+        skipDnsPropagationTest true
+        privateKeyFileMode 644
         additionalSans *.example.com
         renewBeforeDays 20
         certValidationInterval 24h
@@ -41,6 +43,7 @@ example.com:53 {
         customCAD https://localhost:14000/dir
         allowInsecureCAD
         customNameservers 127.0.0.1:53
+        postCertificateMustacheRender <template_path> <result_path>
     }
 }
 ```
@@ -86,6 +89,12 @@ example.com:53 {
 - `dnsTTL`
     - Optional. Int between 60 and 600. Default: 60
         - TTL of the TXT record used for DNS challenge.
+- `postCertificateMustacheRender`
+    - Required. List of two strings.
+        - Should a file be generated using a mustache template after the certificate is created. It contains a context with:
+          - dir (the directory where the file is saved)
+          - key (the private key file name)
+          - pem (the certificate file name)
 
 #### Basic example
 ```

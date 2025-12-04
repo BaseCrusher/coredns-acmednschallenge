@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cbroglie/mustache"
 	"github.com/coredns/coredns/plugin"
 	clog "github.com/coredns/coredns/plugin/pkg/log"
 	"github.com/coredns/coredns/request"
@@ -129,6 +130,24 @@ func (ac *acmeChallenge) checkAndUpdateCertForAllDomains() {
 			}
 			if isNew {
 				saveCerts(certsPath, certs, ac.config.privateKeyFileMode)
+				if ac.config.postCertificateMustacheTemplatePath != "" {
+					res, err := mustache.RenderFile(ac.config.postCertificateMustacheTemplatePath, map[string]string{
+						"dir": certsPath,
+						"key": getFileName(certs.Domain, ".key"),
+						"pem": getFileName(certs.Domain, ".pem"),
+					})
+
+					if err != nil {
+						log.Errorf("Error rendering postCertificateMustacheTemplatePath: %v", err)
+						return
+					}
+
+					err = os.WriteFile(ac.config.postCertificateMustacheResultPath, []byte(res), 0644)
+					if err != nil {
+						log.Errorf("Error writing postCertificateMustacheResultPath: %v", err)
+						return
+					}
+				}
 			} else {
 				log.Infof("Certificate for domain '%s' is still valid, do nothing", d)
 			}
@@ -139,7 +158,7 @@ func (ac *acmeChallenge) checkAndUpdateCertForAllDomains() {
 }
 
 func (ac *acmeChallenge) checkAndCreateOrRenewCert(certsPath string, domain string) (bool, *certificate.Resource, error) {
-	certs := getSavedCert(certsPath, domain)
+	certs := readCerts(certsPath, domain)
 	if certs == nil {
 		log.Infof("No certificate found for %s, obtaining new one", domain)
 		certs, err := ac.coreDNSProvider.obtainNewCertificate(domain)

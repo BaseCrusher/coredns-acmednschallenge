@@ -18,20 +18,22 @@ const defaultRenewBeforeDays = 10
 
 //goland:noinspection GoNameStartsWithPackageName
 type ACMEChallengeConfig struct {
-	dataPath                 string
-	managedDomains           map[string][]string
-	renewBeforeDays          uint32
-	useLetsEncryptTestServer bool
-	email                    string
-	acceptedLetsEncryptToS   bool
-	skipDnsPropagationTest   bool
-	customCAD                string
-	allowInsecureCAD         bool
-	privateKeyFileMode       os.FileMode
-	customNameservers        []string
-	dnsTimeout               time.Duration
-	dnsTTL                   uint32
-	certValidationInterval   time.Duration
+	dataPath                            string
+	managedDomains                      map[string][]string
+	renewBeforeDays                     uint32
+	useLetsEncryptTestServer            bool
+	email                               string
+	acceptedLetsEncryptToS              bool
+	skipDnsPropagationTest              bool
+	customCAD                           string
+	allowInsecureCAD                    bool
+	privateKeyFileMode                  os.FileMode
+	customNameservers                   []string
+	dnsTimeout                          time.Duration
+	dnsTTL                              uint32
+	certValidationInterval              time.Duration
+	postCertificateMustacheTemplatePath string
+	postCertificateMustacheResultPath   string
 }
 
 func parseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
@@ -96,10 +98,16 @@ func parseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 			if err != nil {
 				return nil, c.Errf("invalid privateKeyFileMode it must be 600, 640 or 644 but the value is: %v", c.Val())
 			}
-			if p != 600 && p != 640 && p != 644 {
+			switch p {
+			case 600:
+				cfg.privateKeyFileMode = os.FileMode(0600)
+			case 640:
+				cfg.privateKeyFileMode = os.FileMode(0640)
+			case 644:
+				cfg.privateKeyFileMode = os.FileMode(0644)
+			default:
 				return nil, c.Errf("invalid privateKeyFileMode it must be 600, 640 or 644 but the value is: %v", p)
 			}
-			cfg.renewBeforeDays = uint32(p)
 		case "renewBeforeDays":
 			if !c.NextArg() {
 				return nil, c.ArgErr()
@@ -214,6 +222,24 @@ func parseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 				return nil, c.Errf("invalid certValidationInterval: %v", duration)
 			}
 			cfg.certValidationInterval = d
+		case "postCertificateMustacheRender":
+			if !c.NextArg() {
+				return nil, c.ArgErr()
+			}
+			templatePath := c.Val()
+			if _, err := os.Stat(templatePath); err != nil {
+				return nil, c.Errf("invalid postCertificateMustacheRender. The first value must point to an existing file! Path: %v", templatePath)
+			}
+			if !c.NextArg() {
+				return nil, c.ArgErr()
+			}
+			resultPath := c.Val()
+			resultDir := filepath.Dir(resultPath)
+			if err := os.MkdirAll(resultDir, 0755); err != nil {
+				return nil, c.Errf("failed to create directory for postCertificateMustacheRender resultDir: %v, Error: %v", resultDir, err)
+			}
+			cfg.postCertificateMustacheTemplatePath = templatePath
+			cfg.postCertificateMustacheResultPath = resultPath
 		default:
 			return nil, c.Errf("unknown property '%s'", c.Val())
 		}
