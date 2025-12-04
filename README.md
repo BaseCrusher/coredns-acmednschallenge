@@ -91,7 +91,8 @@ example.com:53 {
         - TTL of the TXT record used for DNS challenge.
 - `postCertificateMustacheRender`
     - Required. List of two strings.
-        - Should a file be generated using a mustache template after the certificate is created. It contains a context with:
+        - Should a file be generated using a mustache template after the certificate is created. The result path can also contain variables from the context. It contains a context with:
+          - domain (the domain in sanitized form for which the certificate was created)
           - dir (the directory where the file is saved)
           - key (the private key file name)
           - pem (the certificate file name)
