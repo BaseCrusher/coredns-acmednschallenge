@@ -2,9 +2,7 @@ package acmednschallenge
 
 import (
 	"bytes"
-	"crypto/x509"
-	"encoding/pem"
-	"fmt"
+	"encoding/json"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -13,14 +11,6 @@ import (
 	"github.com/go-acme/lego/v4/certificate"
 	"golang.org/x/net/idna"
 )
-
-func toCertFileName(domain string) string {
-	return fmt.Sprintf("%s.crt", domain)
-}
-
-func toKeyFileName(domain string) string {
-	return fmt.Sprintf("%s.key", domain)
-}
 
 func saveCerts(certSavePath string, certs *certificate.Resource, privateKeyPermission fs.FileMode) {
 	err := writeFile(certSavePath, certs.Domain, ".key", privateKeyPermission, certs.PrivateKey)
@@ -34,42 +24,46 @@ func saveCerts(certSavePath string, certs *certificate.Resource, privateKeyPermi
 		log.Errorf("unable to save PEM file: %s", err)
 		return
 	}
+
+	jsonBytes, err := json.MarshalIndent(certs, "", "\t")
+	if err != nil {
+		log.Fatalf("Unable to marshal CertResource for domain %s\n\t%v", certs.Domain, err)
+	}
+
+	err = writeFile(certSavePath, certs.Domain, ".json", privateKeyPermission, jsonBytes)
+	if err != nil {
+		log.Fatalf("Unable to save CertResource for domain %s\n\t%v", certs.Domain, err)
+	}
 }
 
-func getSavedCert(certSavePath string, domain string) *certificate.Resource {
-	certFile := filepath.Join(certSavePath, toCertFileName(domain))
-	keyFile := filepath.Join(certSavePath, toKeyFileName(domain))
-
-	certPEM, err := os.ReadFile(certFile)
+func readCerts(certSavePath string, domain string) *certificate.Resource {
+	raw, err := readFile(certSavePath, domain, ".json")
 	if err != nil {
+		log.Fatalf("Error while loading the meta data for domain %s\n\t%v", domain, err)
 		return nil
 	}
 
-	keyPEM, err := os.ReadFile(keyFile)
-	if err != nil {
+	var resource certificate.Resource
+	if err = json.Unmarshal(raw, &resource); err != nil {
+		log.Fatalf("Error while marshaling the meta data for domain %s\n\t%v", domain, err)
 		return nil
 	}
 
-	block, _ := pem.Decode(certPEM)
-	if block == nil || block.Type != "CERTIFICATE" {
-		return nil
-	}
-	if _, err := x509.ParseCertificate(block.Bytes); err != nil {
-		return nil
-	}
+	return &resource
+}
 
-	return &certificate.Resource{
-		Domain:      domain,
-		Certificate: certPEM,
-		PrivateKey:  keyPEM,
-	}
+func readFile(certSavePath string, domain, extension string) ([]byte, error) {
+	filePath := filepath.Join(certSavePath, getFileName(domain, extension))
+	return os.ReadFile(filePath)
 }
 
 func writeFile(certSavePath string, domain, extension string, permission fs.FileMode, data []byte) error {
-	baseFileName := sanitizedDomain(domain)
-	filePath := filepath.Join(certSavePath, baseFileName+extension)
-
+	filePath := filepath.Join(certSavePath, getFileName(domain, extension))
 	return os.WriteFile(filePath, data, permission)
+}
+
+func getFileName(domain, extension string) string {
+	return sanitizedDomain(domain) + extension
 }
 
 func sanitizedDomain(domain string) string {
