@@ -3,6 +3,7 @@ package acmednschallenge
 import (
 	"bytes"
 	"encoding/json"
+	"encoding/pem"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -46,6 +47,31 @@ func readCerts(certSavePath string, domain string) *certificate.Resource {
 	if err != nil {
 		return nil
 	}
+
+	content, err := readFile(certSavePath, domain, ".pem")
+	if err != nil {
+		return nil
+	}
+
+	var certBytes, keyBytes []byte
+
+	for {
+		var block *pem.Block
+		block, _ = pem.Decode(content)
+		if block == nil {
+			break
+		}
+
+		switch block.Type {
+		case "CERTIFICATE":
+			certBytes = pem.EncodeToMemory(block)
+		case "PRIVATE KEY", "RSA PRIVATE KEY", "EC PRIVATE KEY":
+			keyBytes = pem.EncodeToMemory(block)
+		}
+	}
+
+	resource.Certificate = certBytes
+	resource.PrivateKey = keyBytes
 
 	return &resource
 }
