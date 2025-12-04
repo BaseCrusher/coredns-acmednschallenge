@@ -37,9 +37,15 @@ func saveCerts(certSavePath string, certs *certificate.Resource, privateKeyPermi
 }
 
 func readCerts(certSavePath string, domain string) *certificate.Resource {
-	raw, _ := readFile(certSavePath, domain, ".json")
+	raw, err := readFile(certSavePath, domain, ".json")
+	if err != nil {
+		return nil
+	}
 	var resource certificate.Resource
-	json.Unmarshal(raw, &resource)
+	err = json.Unmarshal(raw, &resource)
+	if err != nil {
+		return nil
+	}
 
 	return &resource
 }
