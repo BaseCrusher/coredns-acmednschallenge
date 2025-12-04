@@ -37,17 +37,9 @@ func saveCerts(certSavePath string, certs *certificate.Resource, privateKeyPermi
 }
 
 func readCerts(certSavePath string, domain string) *certificate.Resource {
-	raw, err := readFile(certSavePath, domain, ".json")
-	if err != nil {
-		log.Fatalf("Error while loading the meta data for domain %s\n\t%v", domain, err)
-		return nil
-	}
-
+	raw, _ := readFile(certSavePath, domain, ".json")
 	var resource certificate.Resource
-	if err = json.Unmarshal(raw, &resource); err != nil {
-		log.Fatalf("Error while marshaling the meta data for domain %s\n\t%v", domain, err)
-		return nil
-	}
+	json.Unmarshal(raw, &resource)
 
 	return &resource
 }
