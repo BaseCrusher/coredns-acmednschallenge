@@ -55,19 +55,17 @@ func readCerts(certSavePath string, domain string) *certificate.Resource {
 
 	var certBytes, keyBytes []byte
 
-	for {
-		var block *pem.Block
-		block, _ = pem.Decode(content)
-		if block == nil {
-			break
-		}
+	var block *pem.Block
+	block, _ = pem.Decode(content)
+	if block == nil {
+		return nil
+	}
 
-		switch block.Type {
-		case "CERTIFICATE":
-			certBytes = pem.EncodeToMemory(block)
-		case "PRIVATE KEY", "RSA PRIVATE KEY", "EC PRIVATE KEY":
-			keyBytes = pem.EncodeToMemory(block)
-		}
+	switch block.Type {
+	case "CERTIFICATE":
+		certBytes = pem.EncodeToMemory(block)
+	case "PRIVATE KEY", "RSA PRIVATE KEY", "EC PRIVATE KEY":
+		keyBytes = pem.EncodeToMemory(block)
 	}
 
 	resource.Certificate = certBytes
