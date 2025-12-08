@@ -150,6 +150,11 @@ func (ac *acmeChallenge) checkAndUpdateCertForAllDomains() {
 						return
 					}
 
+					if err := os.MkdirAll(filepath.Dir(resFilePath), os.ModePerm); err != nil {
+						log.Errorf("Error creating directory for result file: %v", err)
+						return
+					}
+
 					err = os.WriteFile(resFilePath, []byte(resFile), 0644)
 					if err != nil {
 						log.Errorf("Error writing postCertificateMustacheResultPath: %v", err)
