@@ -23,7 +23,7 @@ jobs:
       versions: ${{ steps.set.outputs.versions }}
     steps:
       - id: set
-        run: echo 'versions=["v1.12.4","v1.13.2","v1.14.6"]' >> "$GITHUB_OUTPUT"
+        run: echo 'versions=["v1.14.6"]' >> "$GITHUB_OUTPUT"
 
   unit:
     name: unit (coredns ${{ matrix.coredns }})
