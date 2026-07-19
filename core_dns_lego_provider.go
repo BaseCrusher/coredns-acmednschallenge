@@ -6,12 +6,11 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"encoding/pem"
-	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 
+	"github.com/coredns/coredns/plugin/acmednschallenge/config"
+	"github.com/coredns/coredns/plugin/acmednschallenge/storage"
 	clog "github.com/coredns/coredns/plugin/pkg/log"
 	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/challenge/dns01"
@@ -33,68 +32,37 @@ type coreDnsLegoProvider struct {
 	dnsTimeout               time.Duration
 }
 
-func newCoreDnsLegoProvider(acc *ACMEChallengeConfig, challenges *map[string][]string, loggerName string) (*coreDnsLegoProvider, error) {
-	// set lego logger to coredns logger
-	acmeLogger := clog.NewWithPlugin(fmt.Sprintf("%s", loggerName))
+func newCoreDnsLegoProvider(acc *config.ACMEChallengeConfig, account storage.AccountStorage, challenges *map[string][]string, loggerName string) (*coreDnsLegoProvider, error) {
+	acmeLogger := clog.NewWithPlugin(loggerName)
 	acmeLog.Logger = &logger{logger: acmeLogger}
 
 	var privateKey crypto.PrivateKey
-
-	keyFile := filepath.Join(acc.dataPath, "users", acc.email, "key.pem")
-	if err := os.MkdirAll(filepath.Dir(keyFile), os.ModePerm); err != nil {
-		log.Debug("could not create directory structure")
-		return nil, err
-	}
-
-	keyBytes, err := os.ReadFile(keyFile)
 	alreadyExists := false
 
-	if err != nil {
-		privateKey, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if keyPEM := account.LoadAccountKey(acc.Email); keyPEM != nil {
+		pk, err := certcrypto.ParsePEMPrivateKey(keyPEM)
 		if err != nil {
-			log.Debug("could not create private key")
-			return nil, err
+			return nil, fmt.Errorf("could not parse ACME account key for %s: %w", acc.Email, err)
 		}
-
-		err = os.MkdirAll(acc.dataPath, os.ModePerm)
-		if err != nil {
-			log.Debugf("could not write user.json. err: %s", err)
-			return nil, errors.New("could not write user.json")
-		}
-
-		certOut, err := os.Create(keyFile)
-		if err != nil {
-			log.Debugf("could not create file at %s", keyFile)
-			return nil, err
-		}
-
-		defer func(certOut *os.File) {
-			err := certOut.Close()
-			if err != nil {
-				log.Debugf("could not write file at %s", keyFile)
-			}
-		}(certOut)
-
-		pemKey := certcrypto.PEMBlock(privateKey)
-
-		err = pem.Encode(certOut, pemKey)
-		if err != nil {
-			log.Debug("could not encode the certificate")
-			return nil, err
-		}
-		log.Infof("setup new Let's Encrypt %s", keyFile)
-	} else {
-		privateKey, err = certcrypto.ParsePEMPrivateKey(keyBytes)
-		if err != nil {
-			log.Debug("could not parse private key")
-			return nil, err
-		}
-		log.Infof("loaded existing Let's Encrypt user from %s", keyFile)
+		privateKey = pk
 		alreadyExists = true
+		log.Infof("loaded existing Let's Encrypt account for %s", acc.Email)
+	} else {
+		pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			return nil, fmt.Errorf("could not create ACME account key: %w", err)
+		}
+		privateKey = pk
+
+		keyPEM := pem.EncodeToMemory(certcrypto.PEMBlock(pk))
+		if err := account.SaveAccountKey(acc.Email, keyPEM); err != nil {
+			return nil, err
+		}
+		log.Infof("registered new Let's Encrypt account for %s", acc.Email)
 	}
 
 	user := &AcmeUser{
-		Email:         acc.email,
+		Email:         acc.Email,
 		Key:           privateKey,
 		alreadyExists: alreadyExists,
 	}
@@ -102,14 +70,14 @@ func newCoreDnsLegoProvider(acc *ACMEChallengeConfig, challenges *map[string][]s
 	provider := &coreDnsLegoProvider{
 		acmeUser:                 user,
 		activeChallenges:         challenges,
-		acceptedLetsEncryptToS:   acc.acceptedLetsEncryptToS,
-		managedDomains:           acc.managedDomains,
-		useLetsEncryptTestServer: acc.useLetsEncryptTestServer,
-		customCAD:                acc.customCAD,
-		allowInsecureCAD:         acc.allowInsecureCAD,
-		customNameservers:        acc.customNameservers,
-		dnsTimeout:               acc.dnsTimeout,
-		skipDnsPropagationTest:   acc.skipDnsPropagationTest,
+		acceptedLetsEncryptToS:   acc.AcceptedLetsEncryptToS,
+		managedDomains:           acc.ManagedDomains,
+		useLetsEncryptTestServer: acc.UseLetsEncryptTestServer,
+		customCAD:                acc.CustomCAD,
+		allowInsecureCAD:         acc.AllowInsecureCAD,
+		customNameservers:        acc.CustomNameservers,
+		dnsTimeout:               acc.DnsTimeout,
+		skipDnsPropagationTest:   acc.SkipDnsPropagationTest,
 	}
 
 	return provider, nil

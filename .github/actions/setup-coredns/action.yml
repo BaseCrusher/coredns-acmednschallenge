@@ -1,0 +1,25 @@
+name: Set up CoreDNS with the plugin
+description: Clone a pinned CoreDNS, drop this plugin in, set up Go, and prepare the module.
+
+inputs:
+  coredns-version:
+    description: CoreDNS git tag to build against (e.g. v1.14.6).
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Clone CoreDNS
+      shell: bash
+      run: |
+        git clone --depth 1 -b "${{ inputs.coredns-version }}" \
+          https://github.com/coredns/coredns.git "$RUNNER_TEMP/coredns"
+
+    - name: Set up Go
+      uses: actions/setup-go@v7
+      with:
+        go-version-file: ${{ runner.temp }}/coredns/go.mod
+
+    - name: Drop plugin into CoreDNS and tidy
+      shell: bash
+      run: .github/ci/setup-coredns.sh "$RUNNER_TEMP/coredns"

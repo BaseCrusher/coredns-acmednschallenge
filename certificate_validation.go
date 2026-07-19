@@ -26,7 +26,7 @@ func checkIfCertIsValid(ac *acmeChallenge, certs *certificate.Resource) bool {
 		return false
 	}
 
-	if daysLeft < int(ac.config.renewBeforeDays) {
+	if daysLeft < int(ac.config.RenewBeforeDays) {
 		return false
 	}
 

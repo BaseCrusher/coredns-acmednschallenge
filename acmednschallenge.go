@@ -4,14 +4,13 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/cbroglie/mustache"
 	"github.com/coredns/coredns/plugin"
+	"github.com/coredns/coredns/plugin/acmednschallenge/config"
+	"github.com/coredns/coredns/plugin/acmednschallenge/storage"
 	clog "github.com/coredns/coredns/plugin/pkg/log"
 	"github.com/coredns/coredns/request"
 	"github.com/go-acme/lego/v4/certificate"
@@ -22,14 +21,27 @@ var log = clog.NewWithPlugin(name)
 
 type acmeChallenge struct {
 	Next            plugin.Handler
-	config          *ACMEChallengeConfig
+	config          *config.ACMEChallengeConfig
 	challenges      *map[string][]string
 	coreDNSProvider *coreDnsLegoProvider
+	storage         storage.CertStorage
+	obtainOrRenew   func(domain string) (bool, *certificate.Resource, error)
 }
 
-func newAcmeChallenge(config *ACMEChallengeConfig) (*acmeChallenge, error) {
+func newAcmeChallenge(config *config.ACMEChallengeConfig) (*acmeChallenge, error) {
 	challenges := make(map[string][]string)
-	coreDNSProvider, err := newCoreDnsLegoProvider(config, &challenges, fmt.Sprintf("%s/acme", name))
+
+	accountStore, err := storage.NewAccount(config.Account)
+	if err != nil {
+		return nil, err
+	}
+
+	coreDNSProvider, err := newCoreDnsLegoProvider(config, accountStore, &challenges, fmt.Sprintf("%s/acme", name))
+	if err != nil {
+		return nil, err
+	}
+
+	certStorage, err := storage.New(config.Storage)
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +50,9 @@ func newAcmeChallenge(config *ACMEChallengeConfig) (*acmeChallenge, error) {
 		config:          config,
 		challenges:      &challenges,
 		coreDNSProvider: coreDNSProvider,
+		storage:         certStorage,
 	}
+	challenge.obtainOrRenew = challenge.checkAndCreateOrRenewCert
 
 	return challenge, nil
 }
@@ -58,12 +72,10 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 	isAcmeChallenge := strings.HasPrefix(qNameFqdn, "_acme-challenge.")
 	isTxtRequest := state.QType() == dns.TypeTXT
 
-	// when this has nothing to do with ACME, delegate to the next plugin
 	if !isAcmeChallenge || !isTxtRequest {
 		return plugin.NextOrFailure(ac.Name(), ac.Next, ctx, w, r)
 	}
 
-	// check if this plugin manages this txt record. if not, delegate to the next plugin
 	txtValues, ok := (*ac.challenges)[qNameFqdn]
 	if (!ok) || (len(txtValues) == 0) {
 		return plugin.NextOrFailure(ac.Name(), ac.Next, ctx, w, r)
@@ -81,7 +93,7 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 				Name:   dns.Fqdn(qName),
 				Rrtype: dns.TypeTXT,
 				Class:  dns.ClassINET,
-				Ttl:    ac.config.dnsTTL,
+				Ttl:    ac.config.DnsTTL,
 			},
 			Txt: []string{txt},
 		})
@@ -98,7 +110,7 @@ func (ac *acmeChallenge) start() {
 
 	ac.checkAndUpdateCertForAllDomains()
 
-	uptimeTicker := time.NewTicker(ac.config.certValidationInterval)
+	uptimeTicker := time.NewTicker(ac.config.CertValidationInterval)
 
 	for {
 		select {
@@ -111,67 +123,43 @@ func (ac *acmeChallenge) start() {
 func (ac *acmeChallenge) checkAndUpdateCertForAllDomains() {
 	log.Info("starting cert validation!")
 
-	certsPath := filepath.Join(ac.config.dataPath, "certs")
-	if err := os.MkdirAll(certsPath, os.ModePerm); err != nil {
-		log.Errorf("could not create certificates directory at %s: %v", certsPath, err)
-		return
-	}
-
 	var wg sync.WaitGroup
-	for domain := range maps.Keys(ac.config.managedDomains) {
+	for domain := range maps.Keys(ac.config.ManagedDomains) {
 		wg.Add(1)
 		go func(d string) {
 			defer wg.Done()
-
-			isNew, certs, err := ac.checkAndCreateOrRenewCert(certsPath, d)
-			if err != nil {
-				log.Error(err)
-				return
-			}
-			if isNew {
-				saveCerts(certsPath, certs, ac.config.privateKeyFileMode)
-				if ac.config.postCertificateMustacheTemplatePath != "" {
-					mustacheContext := map[string]string{
-						"domain": sanitizedDomain(certs.Domain),
-						"dir":    certsPath,
-						"key":    getFileName(certs.Domain, ".key"),
-						"pem":    getFileName(certs.Domain, ".pem"),
-					}
-
-					resFile, err := mustache.RenderFile(ac.config.postCertificateMustacheTemplatePath, mustacheContext)
-					if err != nil {
-						log.Errorf("Error rendering postCertificateMustacheTemplatePath: %v", err)
-						return
-					}
-
-					resFilePath, err := mustache.Render(ac.config.postCertificateMustacheResultPath, mustacheContext)
-					if err != nil {
-						log.Errorf("Error rendering postCertificateMustacheResultPath: %v", err)
-						return
-					}
-
-					if err := os.MkdirAll(filepath.Dir(resFilePath), os.ModePerm); err != nil {
-						log.Errorf("Error creating directory for result file: %v", err)
-						return
-					}
-
-					err = os.WriteFile(resFilePath, []byte(resFile), 0644)
-					if err != nil {
-						log.Errorf("Error writing postCertificateMustacheResultPath: %v", err)
-						return
-					}
-				}
-			} else {
-				log.Infof("Certificate for domain '%s' is still valid, do nothing", d)
-			}
+			ac.updateCertForDomain(d)
 		}(domain)
 	}
 
 	wg.Wait()
 }
 
-func (ac *acmeChallenge) checkAndCreateOrRenewCert(certsPath string, domain string) (bool, *certificate.Resource, error) {
-	certs := readCerts(certsPath, domain)
+func (ac *acmeChallenge) updateCertForDomain(domain string) {
+	for attempt := uint32(0); ; attempt++ {
+		isNew, certs, err := ac.obtainOrRenew(domain)
+		if err == nil {
+			if isNew {
+				if err := ac.storage.Save(certs); err != nil {
+					log.Errorf("could not save certificate for domain '%s': %v", domain, err)
+				}
+			} else {
+				log.Infof("Certificate for domain '%s' is still valid, do nothing", domain)
+			}
+			return
+		}
+
+		log.Error(err)
+		if ac.config.RetryInterval <= 0 || attempt >= ac.config.MaxRetryCount {
+			return
+		}
+		log.Infof("retrying certificate for domain '%s' in %s (attempt %d/%d)", domain, ac.config.RetryInterval, attempt+1, ac.config.MaxRetryCount)
+		time.Sleep(ac.config.RetryInterval)
+	}
+}
+
+func (ac *acmeChallenge) checkAndCreateOrRenewCert(domain string) (bool, *certificate.Resource, error) {
+	certs := ac.storage.Load(domain)
 	if certs == nil {
 		log.Infof("No certificate found for %s, obtaining new one", domain)
 		certs, err := ac.coreDNSProvider.obtainNewCertificate(domain)

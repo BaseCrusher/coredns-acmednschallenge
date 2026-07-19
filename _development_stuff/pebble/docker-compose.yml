@@ -1,10 +1,17 @@
 services:
   pebble:
-    image: ghcr.io/letsencrypt/pebble:latest
-    command: -config test/config/pebble-config.json -strict -dnsserver 10.30.50.3:8053
+    # Pinned; override with PEBBLE_IMAGE=... in the environment or a .env file.
+    image: ${PEBBLE_IMAGE:-ghcr.io/letsencrypt/pebble:2.10.1}
+    # -dnsserver points Pebble's validation authority at your local CoreDNS
+    # (this plugin) so it really resolves the _acme-challenge TXT record. Runs on
+    # 5354, not 53, to sidestep the mDNS/Bonjour listener that owns 5353 on macOS.
+    command: -config test/config/pebble-config.json -strict -dnsserver host.docker.internal:5354
+    # host.docker.internal resolves to the host automatically on Docker Desktop
+    # (macOS/Windows); extra_hosts makes it work on Linux too.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - 14000:14000 # HTTPS ACME API
       - 15000:15000 # HTTPS Management API
     environment:
       - PEBBLE_VA_NOSLEEP=1
-      - PEBBLE_VA_ALWAYS_VALID=1

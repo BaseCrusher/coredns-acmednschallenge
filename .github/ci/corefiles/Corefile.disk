@@ -1,0 +1,19 @@
+example.org:5354 {
+    acmednschallenge {
+        email admin@example.org
+        acceptedLetsEncryptToS
+        additionalSans *.example.org
+        certificateStorageDisk /tmp/coredns-certs
+        accountStorageDisk /tmp/coredns-acme
+        customCAD https://127.0.0.1:14000/dir
+        allowInsecureCAD
+        skipDnsPropagationTest
+        customNameservers 127.0.0.1:5354
+        renewBeforeDays 120
+    }
+
+    file .github/ci/zones/db.example.org
+
+    log
+    errors
+}

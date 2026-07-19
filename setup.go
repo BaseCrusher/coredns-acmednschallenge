@@ -6,6 +6,7 @@ import (
 	"github.com/coredns/caddy"
 	"github.com/coredns/coredns/core/dnsserver"
 	"github.com/coredns/coredns/plugin"
+	"github.com/coredns/coredns/plugin/acmednschallenge/config"
 )
 
 const name = "acmednschallenge"
@@ -32,7 +33,7 @@ func setup(c *caddy.Controller) error {
 
 	registeredForBlock = append(registeredForBlock, c.ServerBlockIndex)
 
-	cfg, err := parseConfig(c)
+	cfg, err := config.ParseConfig(c)
 	if err != nil {
 		return plugin.Error(name, err)
 	}
