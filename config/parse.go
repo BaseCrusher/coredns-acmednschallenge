@@ -89,6 +89,16 @@ func ParseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 					return nil, c.Errf("certificateStorageDisk file mode must be 600, 640 or 644 but the value is: %v", c.Val())
 				}
 			}
+			if c.NextArg() {
+				if cfg.Storage.KeyMode&0o070 == 0 {
+					return nil, c.Errf("certificateStorageDisk group can only be set when the file mode grants group access (640 or 644), but the mode is %#o", cfg.Storage.KeyMode.Perm())
+				}
+				gid, err := lookupGid(c.Val())
+				if err != nil {
+					return nil, c.Errf("certificateStorageDisk group must be an existing group name or numeric gid: %v", err)
+				}
+				cfg.Storage.Gid = gid
+			}
 		case "certificateStorageKubernetes":
 			if !c.NextArg() {
 				return nil, c.ArgErr()

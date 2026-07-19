@@ -1,10 +1,24 @@
 package config
 
 import (
+	"fmt"
 	"net"
+	"os/user"
 	"regexp"
+	"strconv"
 	"strings"
 )
+
+// lookupGid resolves a group name to its numeric gid, or accepts a numeric gid directly.
+func lookupGid(group string) (int, error) {
+	if g, err := user.LookupGroup(group); err == nil {
+		return strconv.Atoi(g.Gid)
+	}
+	if gid, err := strconv.Atoi(group); err == nil && gid > 0 {
+		return gid, nil
+	}
+	return 0, fmt.Errorf("unknown group %q", group)
+}
 
 func countTrue(bools ...bool) int {
 	n := 0

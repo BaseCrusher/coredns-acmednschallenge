@@ -20,14 +20,20 @@ var log = clog.NewWithPlugin("acmednschallenge")
 type Disk struct {
 	certsPath string
 	keyMode   fs.FileMode
+	gid       int // group to own cert files; <= 0 means leave unchanged
 }
 
-func NewDisk(dataPath string, keyMode fs.FileMode) (*Disk, error) {
+func NewDisk(dataPath string, keyMode fs.FileMode, gid int) (*Disk, error) {
 	certsPath := filepath.Join(dataPath, "certs")
 	if err := os.MkdirAll(certsPath, os.ModePerm); err != nil {
 		return nil, fmt.Errorf("could not create certificates directory at %s: %w", certsPath, err)
 	}
-	return &Disk{certsPath: certsPath, keyMode: keyMode}, nil
+	if gid > 0 {
+		if err := os.Chown(certsPath, -1, gid); err != nil {
+			return nil, fmt.Errorf("could not set group %d on %s: %w", gid, certsPath, err)
+		}
+	}
+	return &Disk{certsPath: certsPath, keyMode: keyMode, gid: gid}, nil
 }
 
 func (d *Disk) Save(certs *certificate.Resource) error {
@@ -91,7 +97,18 @@ func (d *Disk) readFile(domain, extension string) ([]byte, error) {
 }
 
 func (d *Disk) writeFile(domain, extension string, data []byte) error {
-	return os.WriteFile(filepath.Join(d.certsPath, getFileName(domain, extension)), data, d.keyMode)
+	path := filepath.Join(d.certsPath, getFileName(domain, extension))
+	if err := os.WriteFile(path, data, d.keyMode); err != nil {
+		return err
+	}
+	if d.gid > 0 {
+		// os.Chown with uid -1 leaves the owner untouched, so a non-root CoreDNS
+		// (the file owner) can still CRUD while the configured group gets access.
+		if err := os.Chown(path, -1, d.gid); err != nil {
+			return fmt.Errorf("could not set group %d on %s: %w", d.gid, path, err)
+		}
+	}
+	return nil
 }
 
 func getFileName(domain, extension string) string {

@@ -17,6 +17,7 @@ type Options struct {
 
 	DiskPath string
 	KeyMode  fs.FileMode
+	Gid      int // group owner for cert files; <= 0 means leave unchanged
 
 	Namespace string
 
@@ -29,7 +30,7 @@ type Options struct {
 func New(o Options) (CertStorage, error) {
 	switch o.Type {
 	case "disk":
-		return NewDisk(o.DiskPath, o.KeyMode)
+		return NewDisk(o.DiskPath, o.KeyMode, o.Gid)
 	case "kubernetesSecrets":
 		return NewSecrets(o.Namespace)
 	case "vault":

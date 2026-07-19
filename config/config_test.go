@@ -178,6 +178,7 @@ func TestParseConfigStorage(t *testing.T) {
 		wantType        string
 		wantDiskPath    string
 		wantKeyMode     os.FileMode
+		wantGid         int
 		wantNamespace   string
 		wantVaultMount  string
 		wantVaultPrefix string
@@ -216,6 +217,21 @@ func TestParseConfigStorage(t *testing.T) {
 		{
 			name:      "certificateStorageDisk invalid file mode",
 			config:    "acmednschallenge {\nemail a@b.com\nacceptedLetsEncryptToS\ncertificateStorageDisk /srv/certs 700\n}",
+			shouldErr: true,
+		},
+		{
+			name:            "certificateStorageDisk with numeric group",
+			config:          "acmednschallenge {\nemail a@b.com\nacceptedLetsEncryptToS\ncertificateStorageDisk /srv/certs 640 3000\n}",
+			wantType:        "disk",
+			wantDiskPath:    "/srv/certs",
+			wantKeyMode:     0640,
+			wantGid:         3000,
+			wantAccountType: "disk",
+			wantAccountPath: defaultUserDataPath,
+		},
+		{
+			name:      "certificateStorageDisk group rejected without group mode bit",
+			config:    "acmednschallenge {\nemail a@b.com\nacceptedLetsEncryptToS\ncertificateStorageDisk /srv/certs 600 3000\n}",
 			shouldErr: true,
 		},
 		{
@@ -351,6 +367,9 @@ func TestParseConfigStorage(t *testing.T) {
 			}
 			if cfg.Storage.DiskPath != tc.wantDiskPath {
 				t.Errorf("storage.DiskPath = %q, want %q", cfg.Storage.DiskPath, tc.wantDiskPath)
+			}
+			if tc.wantGid != 0 && cfg.Storage.Gid != tc.wantGid {
+				t.Errorf("storage.Gid = %d, want %d", cfg.Storage.Gid, tc.wantGid)
 			}
 			if tc.wantKeyMode != 0 && cfg.Storage.KeyMode != tc.wantKeyMode {
 				t.Errorf("storage.KeyMode = %o, want %o", cfg.Storage.KeyMode, tc.wantKeyMode)

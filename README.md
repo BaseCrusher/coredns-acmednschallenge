@@ -85,9 +85,13 @@ acmednschallenge {
 Where issued certificates are stored. Set at most one; defaults to
 `certificateStorageDisk /var/lib/coredns/certs`.
 
-* `certificateStorageDisk` **PATH** `[MODE]` write certificate files under **PATH**`/certs`. **PATH**
-  must be absolute. The optional **MODE** sets the private-key file mode, one of `600`, `640`, `644`
-  (default `600`).
+* `certificateStorageDisk` **PATH** `[MODE]` `[GROUP]` write certificate files under **PATH**`/certs`.
+  **PATH** must be absolute. The optional **MODE** sets the private-key file mode, one of `600`, `640`,
+  `644` (default `600`). The optional **GROUP** (group name or numeric gid) sets the group owner of the
+  cert files and directory via `chgrp`; the file owner is left unchanged, so a non-root CoreDNS keeps
+  full access. **GROUP** is only accepted when **MODE** grants group access (`640` or `644`) — it is
+  rejected with `600`, since the group would have no way to read the files. Account/user data is
+  unaffected — it is always `600` and owned by the CoreDNS user.
 * `certificateStorageKubernetes` **NAMESPACE** store one `kubernetes.io/tls` Secret per domain in
   **NAMESPACE** (`tls.crt`, `tls.key`, and `acme.json` renewal metadata). Uses in-cluster config,
   falling back to the default kubeconfig (`KUBECONFIG`, `~/.kube/config`) out of cluster.
