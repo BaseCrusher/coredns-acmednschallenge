@@ -15,7 +15,7 @@ func TestDiskChgrp(t *testing.T) {
 	// chgrp to our own gid: always permitted, so this runs unprivileged.
 	gid := os.Getgid()
 	dir := t.TempDir()
-	s, err := New(Options{Type: "disk", DiskPath: dir, KeyMode: 0640, Gid: gid})
+	s, err := New(Options{Type: "disk", DiskPath: dir, CertFileMode: 0640, AccountFileMode: 0640, GroupId: gid})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

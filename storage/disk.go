@@ -18,22 +18,69 @@ import (
 var log = clog.NewWithPlugin("acmednschallenge")
 
 type Disk struct {
-	certsPath string
-	keyMode   fs.FileMode
-	gid       int // group to own cert files; <= 0 means leave unchanged
+	certsPath    string
+	certFileMode fs.FileMode
+	jsonFileMode fs.FileMode
+	groupId      int
 }
 
-func NewDisk(dataPath string, keyMode fs.FileMode, gid int) (*Disk, error) {
+func NewDisk(dataPath string, certFileMode, jsonFileMode fs.FileMode, groupId int) (*Disk, error) {
 	certsPath := filepath.Join(dataPath, "certs")
-	if err := os.MkdirAll(certsPath, os.ModePerm); err != nil {
+	if err := os.MkdirAll(certsPath, dirMode(certFileMode)); err != nil {
 		return nil, fmt.Errorf("could not create certificates directory at %s: %w", certsPath, err)
 	}
-	if gid > 0 {
-		if err := os.Chown(certsPath, -1, gid); err != nil {
-			return nil, fmt.Errorf("could not set group %d on %s: %w", gid, certsPath, err)
+	if err := os.Chmod(certsPath, dirMode(certFileMode)); err != nil {
+		return nil, fmt.Errorf("could not set mode on %s: %w", certsPath, err)
+	}
+	if groupId > 0 {
+		if err := os.Chown(certsPath, -1, groupId); err != nil {
+			return nil, fmt.Errorf("could not set group %d on %s: %w", groupId, certsPath, err)
 		}
 	}
-	return &Disk{certsPath: certsPath, keyMode: keyMode, gid: gid}, nil
+	d := &Disk{certsPath: certsPath, certFileMode: certFileMode, jsonFileMode: jsonFileMode, groupId: groupId}
+	if err := d.reconcile(); err != nil {
+		return nil, err
+	}
+	return d, nil
+}
+
+func (d *Disk) reconcile() error {
+	entries, err := os.ReadDir(d.certsPath)
+	if err != nil {
+		return fmt.Errorf("could not read certificates directory at %s: %w", d.certsPath, err)
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		p := filepath.Join(d.certsPath, e.Name())
+		if err := os.Chmod(p, d.modeFor(e.Name())); err != nil {
+			return fmt.Errorf("could not set mode on %s: %w", p, err)
+		}
+		if d.groupId > 0 {
+			if err := os.Chown(p, -1, d.groupId); err != nil {
+				return fmt.Errorf("could not set group %d on %s: %w", d.groupId, p, err)
+			}
+		}
+	}
+	return nil
+}
+
+func (d *Disk) modeFor(name string) fs.FileMode {
+	if filepath.Ext(name) == ".json" {
+		return d.jsonFileMode
+	}
+	return d.certFileMode
+}
+
+func dirMode(m fs.FileMode) fs.FileMode {
+	d := m
+	for _, r := range []fs.FileMode{0400, 0040, 0004} {
+		if m&r != 0 {
+			d |= r >> 2
+		}
+	}
+	return d
 }
 
 func (d *Disk) Save(certs *certificate.Resource) error {
@@ -97,15 +144,14 @@ func (d *Disk) readFile(domain, extension string) ([]byte, error) {
 }
 
 func (d *Disk) writeFile(domain, extension string, data []byte) error {
-	path := filepath.Join(d.certsPath, getFileName(domain, extension))
-	if err := os.WriteFile(path, data, d.keyMode); err != nil {
+	name := getFileName(domain, extension)
+	path := filepath.Join(d.certsPath, name)
+	if err := os.WriteFile(path, data, d.modeFor(name)); err != nil {
 		return err
 	}
-	if d.gid > 0 {
-		// os.Chown with uid -1 leaves the owner untouched, so a non-root CoreDNS
-		// (the file owner) can still CRUD while the configured group gets access.
-		if err := os.Chown(path, -1, d.gid); err != nil {
-			return fmt.Errorf("could not set group %d on %s: %w", d.gid, path, err)
+	if d.groupId > 0 {
+		if err := os.Chown(path, -1, d.groupId); err != nil {
+			return fmt.Errorf("could not set group %d on %s: %w", d.groupId, path, err)
 		}
 	}
 	return nil

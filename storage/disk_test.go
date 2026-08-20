@@ -13,7 +13,7 @@ func TestNewUnknownType(t *testing.T) {
 }
 
 func TestDiskRoundTrip(t *testing.T) {
-	s, err := New(Options{Type: "disk", DiskPath: t.TempDir(), KeyMode: 0600})
+	s, err := New(Options{Type: "disk", DiskPath: t.TempDir(), CertFileMode: 0600, AccountFileMode: 0600})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

@@ -85,13 +85,17 @@ acmednschallenge {
 Where issued certificates are stored. Set at most one; defaults to
 `certificateStorageDisk /var/lib/coredns/certs`.
 
-* `certificateStorageDisk` **PATH** `[MODE]` `[GROUP]` write certificate files under **PATH**`/certs`.
-  **PATH** must be absolute. The optional **MODE** sets the private-key file mode, one of `600`, `640`,
-  `644` (default `600`). The optional **GROUP** (group name or numeric gid) sets the group owner of the
-  cert files and directory via `chgrp`; the file owner is left unchanged, so a non-root CoreDNS keeps
-  full access. **GROUP** is only accepted when **MODE** grants group access (`640` or `644`) — it is
-  rejected with `600`, since the group would have no way to read the files. Account/user data is
-  unaffected — it is always `600` and owned by the CoreDNS user.
+* `certificateStorageDisk` **PATH** `[CERT_MODE]` `[ACCOUNT_MODE]` `[GROUP]` write certificate files
+  under **PATH**`/certs`. **PATH** must be absolute. The optional **CERT_MODE** sets the mode of the
+  `.key`/`.pem` files and the `certs` directory (which additionally gets the matching execute bits:
+  `600`→`700`, `640`→`750`, `644`→`755`), one of `600`, `640`, `644` (default `600`). The optional
+  **ACCOUNT_MODE** sets the mode of the `.json` files, same values (default `600`). The optional
+  **GROUP** (group name or numeric gid) sets the group owner of the cert files and directory via
+  `chgrp`; the file owner is left unchanged, so a non-root CoreDNS keeps full access. **GROUP** is only
+  accepted when **CERT_MODE** or **ACCOUNT_MODE** grants group access (`640` or `644`) — it is rejected
+  when both are `600`, since the group would have no way to read the files. On startup the configured
+  mode and group are re-applied to any existing files, so changing them in the config takes effect on
+  restart. Account/user data is unaffected — it is always `600` and owned by the CoreDNS user.
 * `certificateStorageKubernetes` **NAMESPACE** store one `kubernetes.io/tls` Secret per domain in
   **NAMESPACE** (`tls.crt`, `tls.key`, and `acme.json` renewal metadata). Uses in-cluster config,
   falling back to the default kubeconfig (`KUBECONFIG`, `~/.kube/config`) out of cluster.

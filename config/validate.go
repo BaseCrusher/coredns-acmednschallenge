@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"net"
+	"os"
 	"os/user"
 	"regexp"
 	"strconv"
@@ -18,6 +19,19 @@ func lookupGid(group string) (int, error) {
 		return gid, nil
 	}
 	return 0, fmt.Errorf("unknown group %q", group)
+}
+
+func parseFileMode(v string) (os.FileMode, bool) {
+	switch v {
+	case "600":
+		return os.FileMode(0600), true
+	case "640":
+		return os.FileMode(0640), true
+	case "644":
+		return os.FileMode(0644), true
+	default:
+		return 0, false
+	}
 }
 
 func countTrue(bools ...bool) int {

@@ -172,21 +172,22 @@ func TestParseConfigRenewBeforeDays(t *testing.T) {
 
 func TestParseConfigStorage(t *testing.T) {
 	tests := []struct {
-		name            string
-		config          string
-		shouldErr       bool
-		wantType        string
-		wantDiskPath    string
-		wantKeyMode     os.FileMode
-		wantGid         int
-		wantNamespace   string
-		wantVaultMount  string
-		wantVaultPrefix string
-		wantVaultAuth   string
-		wantVaultRole   string
-		wantAccountType string
-		wantAccountPath string
-		wantAccountNsp  string
+		name                string
+		config              string
+		shouldErr           bool
+		wantType            string
+		wantDiskPath        string
+		wantCertFileMode    os.FileMode
+		wantAccountFileMode os.FileMode
+		wantGid             int
+		wantNamespace       string
+		wantVaultMount      string
+		wantVaultPrefix     string
+		wantVaultAuth       string
+		wantVaultRole       string
+		wantAccountType     string
+		wantAccountPath     string
+		wantAccountNsp      string
 	}{
 		{
 			name:            "defaults",
@@ -197,41 +198,57 @@ func TestParseConfigStorage(t *testing.T) {
 			wantAccountPath: defaultUserDataPath,
 		},
 		{
-			name:            "certificateStorageDisk with path",
-			config:          "acmednschallenge {\nemail a@b.com\nacceptedLetsEncryptToS\ncertificateStorageDisk /srv/certs\n}",
-			wantType:        "disk",
-			wantDiskPath:    "/srv/certs",
-			wantKeyMode:     0600,
-			wantAccountType: "disk",
-			wantAccountPath: defaultUserDataPath,
+			name:             "certificateStorageDisk with path",
+			config:           "acmednschallenge {\nemail a@b.com\nacceptedLetsEncryptToS\ncertificateStorageDisk /srv/certs\n}",
+			wantType:         "disk",
+			wantDiskPath:     "/srv/certs",
+			wantCertFileMode: 0600,
+			wantAccountType:  "disk",
+			wantAccountPath:  defaultUserDataPath,
 		},
 		{
-			name:            "certificateStorageDisk with file mode",
-			config:          "acmednschallenge {\nemail a@b.com\nacceptedLetsEncryptToS\ncertificateStorageDisk /srv/certs 640\n}",
-			wantType:        "disk",
-			wantDiskPath:    "/srv/certs",
-			wantKeyMode:     0640,
-			wantAccountType: "disk",
-			wantAccountPath: defaultUserDataPath,
+			name:             "certificateStorageDisk with cert file mode",
+			config:           "acmednschallenge {\nemail a@b.com\nacceptedLetsEncryptToS\ncertificateStorageDisk /srv/certs 640\n}",
+			wantType:         "disk",
+			wantDiskPath:     "/srv/certs",
+			wantCertFileMode: 0640,
+			wantAccountType:  "disk",
+			wantAccountPath:  defaultUserDataPath,
 		},
 		{
-			name:      "certificateStorageDisk invalid file mode",
+			name:                "certificateStorageDisk with cert and account file modes",
+			config:              "acmednschallenge {\nemail a@b.com\nacceptedLetsEncryptToS\ncertificateStorageDisk /srv/certs 640 644\n}",
+			wantType:            "disk",
+			wantDiskPath:        "/srv/certs",
+			wantCertFileMode:    0640,
+			wantAccountFileMode: 0644,
+			wantAccountType:     "disk",
+			wantAccountPath:     defaultUserDataPath,
+		},
+		{
+			name:      "certificateStorageDisk invalid cert file mode",
 			config:    "acmednschallenge {\nemail a@b.com\nacceptedLetsEncryptToS\ncertificateStorageDisk /srv/certs 700\n}",
 			shouldErr: true,
 		},
 		{
-			name:            "certificateStorageDisk with numeric group",
-			config:          "acmednschallenge {\nemail a@b.com\nacceptedLetsEncryptToS\ncertificateStorageDisk /srv/certs 640 3000\n}",
-			wantType:        "disk",
-			wantDiskPath:    "/srv/certs",
-			wantKeyMode:     0640,
-			wantGid:         3000,
-			wantAccountType: "disk",
-			wantAccountPath: defaultUserDataPath,
+			name:      "certificateStorageDisk invalid account file mode",
+			config:    "acmednschallenge {\nemail a@b.com\nacceptedLetsEncryptToS\ncertificateStorageDisk /srv/certs 640 700\n}",
+			shouldErr: true,
+		},
+		{
+			name:                "certificateStorageDisk with numeric group",
+			config:              "acmednschallenge {\nemail a@b.com\nacceptedLetsEncryptToS\ncertificateStorageDisk /srv/certs 640 640 3000\n}",
+			wantType:            "disk",
+			wantDiskPath:        "/srv/certs",
+			wantCertFileMode:    0640,
+			wantAccountFileMode: 0640,
+			wantGid:             3000,
+			wantAccountType:     "disk",
+			wantAccountPath:     defaultUserDataPath,
 		},
 		{
 			name:      "certificateStorageDisk group rejected without group mode bit",
-			config:    "acmednschallenge {\nemail a@b.com\nacceptedLetsEncryptToS\ncertificateStorageDisk /srv/certs 600 3000\n}",
+			config:    "acmednschallenge {\nemail a@b.com\nacceptedLetsEncryptToS\ncertificateStorageDisk /srv/certs 600 600 3000\n}",
 			shouldErr: true,
 		},
 		{
@@ -368,11 +385,14 @@ func TestParseConfigStorage(t *testing.T) {
 			if cfg.Storage.DiskPath != tc.wantDiskPath {
 				t.Errorf("storage.DiskPath = %q, want %q", cfg.Storage.DiskPath, tc.wantDiskPath)
 			}
-			if tc.wantGid != 0 && cfg.Storage.Gid != tc.wantGid {
-				t.Errorf("storage.Gid = %d, want %d", cfg.Storage.Gid, tc.wantGid)
+			if tc.wantGid != 0 && cfg.Storage.GroupId != tc.wantGid {
+				t.Errorf("storage.GroupId = %d, want %d", cfg.Storage.GroupId, tc.wantGid)
 			}
-			if tc.wantKeyMode != 0 && cfg.Storage.KeyMode != tc.wantKeyMode {
-				t.Errorf("storage.KeyMode = %o, want %o", cfg.Storage.KeyMode, tc.wantKeyMode)
+			if tc.wantCertFileMode != 0 && cfg.Storage.CertFileMode != tc.wantCertFileMode {
+				t.Errorf("storage.CertFileMode = %o, want %o", cfg.Storage.CertFileMode, tc.wantCertFileMode)
+			}
+			if tc.wantAccountFileMode != 0 && cfg.Storage.AccountFileMode != tc.wantAccountFileMode {
+				t.Errorf("storage.AccountFileMode = %o, want %o", cfg.Storage.AccountFileMode, tc.wantAccountFileMode)
 			}
 			if cfg.Storage.Namespace != tc.wantNamespace {
 				t.Errorf("storage.Namespace = %q, want %q", cfg.Storage.Namespace, tc.wantNamespace)

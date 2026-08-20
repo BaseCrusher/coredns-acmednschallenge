@@ -15,9 +15,10 @@ import (
 func ParseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 	cfg := &ACMEChallengeConfig{
 		Storage: storage.Options{
-			Type:     "disk",
-			DiskPath: defaultCertSavePath,
-			KeyMode:  os.FileMode(0600),
+			Type:            "disk",
+			DiskPath:        defaultCertSavePath,
+			CertFileMode:    os.FileMode(0600),
+			AccountFileMode: os.FileMode(0600),
 		},
 		Account: storage.Options{
 			Type:     "disk",
@@ -78,26 +79,28 @@ func ParseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 			cfg.Storage.DiskPath = p
 			certificateStorageDiskSet = true
 			if c.NextArg() {
-				switch c.Val() {
-				case "600":
-					cfg.Storage.KeyMode = os.FileMode(0600)
-				case "640":
-					cfg.Storage.KeyMode = os.FileMode(0640)
-				case "644":
-					cfg.Storage.KeyMode = os.FileMode(0644)
-				default:
-					return nil, c.Errf("certificateStorageDisk file mode must be 600, 640 or 644 but the value is: %v", c.Val())
+				mode, ok := parseFileMode(c.Val())
+				if !ok {
+					return nil, c.Errf("certificateStorageDisk cert file mode must be 600, 640 or 644 but the value is: %v", c.Val())
 				}
+				cfg.Storage.CertFileMode = mode
 			}
 			if c.NextArg() {
-				if cfg.Storage.KeyMode&0o070 == 0 {
-					return nil, c.Errf("certificateStorageDisk group can only be set when the file mode grants group access (640 or 644), but the mode is %#o", cfg.Storage.KeyMode.Perm())
+				mode, ok := parseFileMode(c.Val())
+				if !ok {
+					return nil, c.Errf("certificateStorageDisk account file mode must be 600, 640 or 644 but the value is: %v", c.Val())
+				}
+				cfg.Storage.AccountFileMode = mode
+			}
+			if c.NextArg() {
+				if cfg.Storage.CertFileMode&0o070 == 0 && cfg.Storage.AccountFileMode&0o070 == 0 {
+					return nil, c.Errf("certificateStorageDisk group can only be set when a file mode grants group access (640 or 644), but the modes are %#o and %#o", cfg.Storage.CertFileMode.Perm(), cfg.Storage.AccountFileMode.Perm())
 				}
 				gid, err := lookupGid(c.Val())
 				if err != nil {
 					return nil, c.Errf("certificateStorageDisk group must be an existing group name or numeric gid: %v", err)
 				}
-				cfg.Storage.Gid = gid
+				cfg.Storage.GroupId = gid
 			}
 		case "certificateStorageKubernetes":
 			if !c.NextArg() {
