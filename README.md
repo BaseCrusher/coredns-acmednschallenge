@@ -51,6 +51,7 @@ acmednschallenge {
     customCAD URL
     allowInsecureCAD
     customNameservers NAMESERVER...
+    clusterMode SERVICE [PORT] [OWN_IP]
 
     # certificate storage — choose at most one (default: certificateStorageDisk /var/lib/coredns/certs)
     certificateStorageDisk PATH [MODE] [GROUP]
@@ -92,6 +93,8 @@ acmednschallenge {
   Takes no argument.
 * `customNameservers` **NAMESERVER...** **optional**, nameservers to use for lego's propagation
   pre-check. For development only.
+* `clusterMode` **SERVICE** `[PORT]` **optional**, run several CoreDNS instances as a cluster. Its
+  presence enables cluster mode (default off). See [Cluster mode](#cluster-mode).
 * `certificateStorage*` **optional**, where issued certificates are stored — pick at most one backend.
   See [Certificate storage](#certificate-storage).
 * `acmeAccountStorage*` **optional**, where the ACME account key is stored, chosen independently — pick
@@ -133,6 +136,50 @@ defaults to `acmeAccountStorageDisk /var/lib/coredns/acme-user`.
   (`acme-account-`*email*) in **NAMESPACE**.
 * `acmeAccountStorageVault` **MOUNT** **PREFIX** `[token|kubernetes ROLE]` store the account key at
   **MOUNT**`/data/`**PREFIX**`/`*email*. See [Vault / OpenBao](#vault--openbao).
+
+### Cluster mode
+
+By default a single CoreDNS instance drives ACME. `clusterMode` lets you run several instances behind
+one zone: exactly one is elected leader and drives ACME issuance/renewal, while **every** instance
+serves the `_acme-challenge` TXT records, so the DNS-01 challenge resolves no matter which instance the
+CA queries.
+
+* `clusterMode` **SERVICE** `[PORT]` `[OWN_IP]` — **SERVICE** is a DNS name that resolves to the addresses
+  of all instances (a Kubernetes headless Service, a Docker Swarm `tasks.` name, etc.). **PORT** is the
+  port of the small internal HTTP API each instance runs for coordination; default `8090`. **OWN_IP** is
+  this instance's address as seen in **SERVICE**; set it when an instance cannot identify itself
+  automatically (see below). **PORT** and **OWN_IP** are optional and may be given in either order.
+
+How it works:
+
+* Instances discover their peers by resolving **SERVICE** and identify themselves by matching a resolved
+  address against their local interfaces — no per-instance config needed in the common case. If an
+  instance's address in **SERVICE** is not one of its local interface addresses (NAT, a routed/overlay
+  setup, a ClusterIP rather than pod IPs), it cannot find itself and will refuse to participate; set
+  **OWN_IP** to that address to fix it.
+* The leader is deterministic: the instance with the **lowest IP** wins. If the leader disappears, the
+  remaining instances re-elect within a few seconds.
+* The leader pushes each challenge TXT record to all peers as soon as it is created, and every follower
+  also polls the leader every 5s as a backstop — so records appear near-instantly and an instance
+  joining mid-challenge picks up in-flight records right away.
+
+> [!WARNING]
+> **Cluster mode requires shared storage.** It only coordinates the ACME challenge; it does **not**
+> replicate issued certificates or the account key between instances. Every instance must read and write
+> the **same** storage, so any node can serve certs and any node can issue once elected leader. Use a
+> backend that is shared by design (`certificateStorageKubernetes`/`certificateStorageVault` and the
+> matching `acmeAccountStorage*`), **or** `certificateStorageDisk`/`acmeAccountStorageDisk` pointing at a
+> shared volume mounted by all instances (NFS, a multi-attach block volume, etc.). Per-instance disk
+> storage that is not shared will make every leader change re-issue from scratch and quickly hit ACME
+> rate limits.
+
+Every node must be mounted with **read and write** access to the shared certificate and account-key
+storage — not just the current leader. Leadership is re-elected as instances come and go, so any node
+may become the leader and issue, renew, and save certificates and the account key at any time. A node
+mounted read-only will fail to persist certificates once it is elected leader.
+
+The internal API is unauthenticated; it only carries challenge TXT values, which are public in DNS
+anyway.
 
 ### Vault / OpenBao
 

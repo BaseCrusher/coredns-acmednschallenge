@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net"
 	"net/mail"
 	"os"
 	"path/filepath"
@@ -260,6 +261,24 @@ func ParseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 				return nil, c.Errf("invalid maxRetryCount, it must be a non-negative integer but the value is: %v", c.Val())
 			}
 			cfg.MaxRetryCount = uint32(n)
+		case "clusterMode":
+			if !c.NextArg() {
+				return nil, c.ArgErr()
+			}
+			cc := &ClusterConfig{PeerService: c.Val(), APIPort: defaultClusterAPIPort}
+			for c.NextArg() {
+				v := c.Val()
+				if net.ParseIP(v) != nil {
+					cc.OwnIP = v
+					continue
+				}
+				port, err := strconv.Atoi(v)
+				if err != nil || port < 1 || port > 65535 {
+					return nil, c.Errf("invalid clusterMode argument, expected a port (1-65535) or an IP address but got: %v", v)
+				}
+				cc.APIPort = port
+			}
+			cfg.Cluster = cc
 		default:
 			return nil, c.Errf("unknown property '%s'", c.Val())
 		}

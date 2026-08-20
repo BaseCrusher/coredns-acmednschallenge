@@ -33,4 +33,13 @@ type ACMEChallengeConfig struct {
 	CertValidationInterval   time.Duration
 	RetryInterval            time.Duration
 	MaxRetryCount            uint32
+	Cluster                  *ClusterConfig
 }
+
+type ClusterConfig struct {
+	PeerService string
+	APIPort     int
+	OwnIP       string
+}
+
+const defaultClusterAPIPort = 8090

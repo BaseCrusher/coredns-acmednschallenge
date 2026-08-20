@@ -20,7 +20,7 @@ import (
 
 type coreDnsLegoProvider struct {
 	acmeUser         *AcmeUser
-	activeChallenges *map[string][]string
+	activeChallenges *challengeStore
 
 	acceptedLetsEncryptToS   bool
 	managedDomains           map[string][]string
@@ -32,7 +32,7 @@ type coreDnsLegoProvider struct {
 	dnsTimeout               time.Duration
 }
 
-func newCoreDnsLegoProvider(acc *config.ACMEChallengeConfig, account storage.AccountStorage, challenges *map[string][]string, loggerName string) (*coreDnsLegoProvider, error) {
+func newCoreDnsLegoProvider(acc *config.ACMEChallengeConfig, account storage.AccountStorage, challenges *challengeStore, loggerName string) (*coreDnsLegoProvider, error) {
 	acmeLogger := clog.NewWithPlugin(loggerName)
 	acmeLog.Logger = &logger{logger: acmeLogger}
 
@@ -86,11 +86,7 @@ func newCoreDnsLegoProvider(acc *config.ACMEChallengeConfig, account storage.Acc
 func (p *coreDnsLegoProvider) Present(domain, _, keyAuth string) error {
 	info := dns01.GetChallengeInfo(domain, keyAuth)
 	fdqn := dns.Fqdn(info.EffectiveFQDN)
-	if (*p.activeChallenges)[fdqn] == nil {
-		(*p.activeChallenges)[fdqn] = []string{}
-	}
-
-	(*p.activeChallenges)[fdqn] = append((*p.activeChallenges)[fdqn], info.Value)
+	p.activeChallenges.add(fdqn, info.Value)
 
 	log.Infof("added TXT '%s' record for domain '%s'", info.Value, domain)
 	return nil
@@ -99,7 +95,7 @@ func (p *coreDnsLegoProvider) Present(domain, _, keyAuth string) error {
 func (p *coreDnsLegoProvider) CleanUp(domain, _, keyAuth string) error {
 	info := dns01.GetChallengeInfo(domain, keyAuth)
 	fdqn := dns.Fqdn(info.EffectiveFQDN)
-	delete(*p.activeChallenges, fdqn)
+	p.activeChallenges.remove(fdqn)
 	log.Infof("removed TXT '%s' record for domain '%s'", info.Value, fdqn)
 	return nil
 }

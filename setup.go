@@ -1,6 +1,7 @@
 package acmednschallenge
 
 import (
+	"context"
 	"errors"
 
 	"github.com/coredns/caddy"
@@ -44,7 +45,11 @@ func setup(c *caddy.Controller) error {
 	}
 
 	c.OnStartup(func() error {
-		go ac.start()
+		if ac.cluster != nil {
+			go ac.cluster.run()
+		} else {
+			go ac.start(context.Background())
+		}
 		return nil
 	})
 

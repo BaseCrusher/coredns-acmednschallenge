@@ -114,6 +114,96 @@ func TestParseConfigRetryInterval(t *testing.T) {
 	}
 }
 
+func TestParseConfigClusterMode(t *testing.T) {
+	tests := []struct {
+		name      string
+		config    string
+		shouldErr bool
+		wantNil   bool
+		wantSvc   string
+		wantPort  int
+		wantIP    string
+	}{
+		{
+			name:    "off by default",
+			config:  "acmednschallenge {\nemail a@b.com\nacceptedLetsEncryptToS\n}",
+			wantNil: true,
+		},
+		{
+			name:     "service with default port",
+			config:   "acmednschallenge {\nemail a@b.com\nacceptedLetsEncryptToS\nclusterMode coredns.default.svc\n}",
+			wantSvc:  "coredns.default.svc",
+			wantPort: defaultClusterAPIPort,
+		},
+		{
+			name:     "service with custom port",
+			config:   "acmednschallenge {\nemail a@b.com\nacceptedLetsEncryptToS\nclusterMode coredns.default.svc 9000\n}",
+			wantSvc:  "coredns.default.svc",
+			wantPort: 9000,
+		},
+		{
+			name:     "service with own IP",
+			config:   "acmednschallenge {\nemail a@b.com\nacceptedLetsEncryptToS\nclusterMode coredns.default.svc 10.0.0.5\n}",
+			wantSvc:  "coredns.default.svc",
+			wantPort: defaultClusterAPIPort,
+			wantIP:   "10.0.0.5",
+		},
+		{
+			name:     "service with port and own IP any order",
+			config:   "acmednschallenge {\nemail a@b.com\nacceptedLetsEncryptToS\nclusterMode coredns.default.svc 10.0.0.5 9000\n}",
+			wantSvc:  "coredns.default.svc",
+			wantPort: 9000,
+			wantIP:   "10.0.0.5",
+		},
+		{
+			name:      "missing service rejected",
+			config:    "acmednschallenge {\nemail a@b.com\nacceptedLetsEncryptToS\nclusterMode\n}",
+			shouldErr: true,
+		},
+		{
+			name:      "invalid port rejected",
+			config:    "acmednschallenge {\nemail a@b.com\nacceptedLetsEncryptToS\nclusterMode svc 99999\n}",
+			shouldErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := caddy.NewTestController("dns", tc.config)
+			c.ServerBlockKeys = []string{"example.com"}
+
+			cfg, err := ParseConfig(c)
+			if tc.shouldErr {
+				if err == nil {
+					t.Fatalf("expected error, got none")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tc.wantNil {
+				if cfg.Cluster != nil {
+					t.Fatalf("Cluster = %+v, want nil", cfg.Cluster)
+				}
+				return
+			}
+			if cfg.Cluster == nil {
+				t.Fatal("Cluster = nil, want configured")
+			}
+			if cfg.Cluster.PeerService != tc.wantSvc {
+				t.Errorf("PeerService = %q, want %q", cfg.Cluster.PeerService, tc.wantSvc)
+			}
+			if cfg.Cluster.APIPort != tc.wantPort {
+				t.Errorf("APIPort = %d, want %d", cfg.Cluster.APIPort, tc.wantPort)
+			}
+			if cfg.Cluster.OwnIP != tc.wantIP {
+				t.Errorf("OwnIP = %q, want %q", cfg.Cluster.OwnIP, tc.wantIP)
+			}
+		})
+	}
+}
+
 func TestParseConfigRenewBeforeDays(t *testing.T) {
 	tests := []struct {
 		name      string

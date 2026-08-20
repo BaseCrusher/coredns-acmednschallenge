@@ -12,10 +12,14 @@ import (
 )
 
 func newTestChallenge(next plugin.Handler, challenges map[string][]string) *acmeChallenge {
+	store := newChallengeStore()
+	if challenges != nil {
+		store.replace(challenges)
+	}
 	return &acmeChallenge{
 		Next:       next,
 		config:     &config.ACMEChallengeConfig{DnsTTL: 120},
-		challenges: &challenges,
+		challenges: store,
 	}
 }
 
@@ -95,8 +99,8 @@ func TestServeDNS(t *testing.T) {
 }
 
 func TestPresentCleanUp(t *testing.T) {
-	challenges := map[string][]string{}
-	p := &coreDnsLegoProvider{activeChallenges: &challenges}
+	store := newChallengeStore()
+	p := &coreDnsLegoProvider{activeChallenges: store}
 
 	if err := p.Present("example.com", "", "keyauth-one"); err != nil {
 		t.Fatalf("Present: %v", err)
@@ -105,6 +109,7 @@ func TestPresentCleanUp(t *testing.T) {
 		t.Fatalf("Present: %v", err)
 	}
 
+	challenges := store.snapshot()
 	if len(challenges) != 1 {
 		t.Fatalf("got %d fqdn keys, want 1", len(challenges))
 	}
@@ -117,8 +122,8 @@ func TestPresentCleanUp(t *testing.T) {
 	if err := p.CleanUp("example.com", "", "keyauth-one"); err != nil {
 		t.Fatalf("CleanUp: %v", err)
 	}
-	if len(challenges) != 0 {
-		t.Errorf("CleanUp left %d entries, want 0", len(challenges))
+	if !store.isEmpty() {
+		t.Errorf("CleanUp left %d entries, want 0", len(store.snapshot()))
 	}
 }
 

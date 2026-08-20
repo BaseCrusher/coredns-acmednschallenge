@@ -1,6 +1,7 @@
 package acmednschallenge
 
 import (
+	"context"
 	"errors"
 	"sort"
 	"sync"
@@ -80,7 +81,7 @@ func TestCheckAndUpdateCertForAllDomains(t *testing.T) {
 		return false, nil, nil
 	}
 
-	ac.checkAndUpdateCertForAllDomains()
+	ac.checkAndUpdateCertForAllDomains(context.Background())
 
 	sort.Strings(seen)
 	if len(seen) != len(want) {

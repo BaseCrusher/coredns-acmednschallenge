@@ -22,21 +22,22 @@ var log = clog.NewWithPlugin(name)
 type acmeChallenge struct {
 	Next            plugin.Handler
 	config          *config.ACMEChallengeConfig
-	challenges      *map[string][]string
+	challenges      *challengeStore
 	coreDNSProvider *coreDnsLegoProvider
 	storage         storage.CertStorage
 	obtainOrRenew   func(domain string) (bool, *certificate.Resource, error)
+	cluster         *cluster
 }
 
 func newAcmeChallenge(config *config.ACMEChallengeConfig) (*acmeChallenge, error) {
-	challenges := make(map[string][]string)
+	challenges := newChallengeStore()
 
 	accountStore, err := storage.NewAccount(config.Account)
 	if err != nil {
 		return nil, err
 	}
 
-	coreDNSProvider, err := newCoreDnsLegoProvider(config, accountStore, &challenges, fmt.Sprintf("%s/acme", name))
+	coreDNSProvider, err := newCoreDnsLegoProvider(config, accountStore, challenges, fmt.Sprintf("%s/acme", name))
 	if err != nil {
 		return nil, err
 	}
@@ -48,11 +49,15 @@ func newAcmeChallenge(config *config.ACMEChallengeConfig) (*acmeChallenge, error
 
 	challenge := &acmeChallenge{
 		config:          config,
-		challenges:      &challenges,
+		challenges:      challenges,
 		coreDNSProvider: coreDNSProvider,
 		storage:         certStorage,
 	}
 	challenge.obtainOrRenew = challenge.checkAndCreateOrRenewCert
+
+	if config.Cluster != nil {
+		challenge.cluster = newCluster(challenge, config.Cluster)
+	}
 
 	return challenge, nil
 }
@@ -76,7 +81,7 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 		return plugin.NextOrFailure(ac.Name(), ac.Next, ctx, w, r)
 	}
 
-	txtValues, ok := (*ac.challenges)[qNameFqdn]
+	txtValues, ok := ac.challenges.get(qNameFqdn)
 	if (!ok) || (len(txtValues) == 0) {
 		return plugin.NextOrFailure(ac.Name(), ac.Next, ctx, w, r)
 	}
@@ -104,23 +109,31 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 	return dns.RcodeSuccess, nil
 }
 
-func (ac *acmeChallenge) start() {
+func (ac *acmeChallenge) start(ctx context.Context) {
 
 	log.Info("started certificate service")
 
-	ac.checkAndUpdateCertForAllDomains()
+	ac.checkAndUpdateCertForAllDomains(ctx)
 
 	uptimeTicker := time.NewTicker(ac.config.CertValidationInterval)
+	defer uptimeTicker.Stop()
 
 	for {
 		select {
+		case <-ctx.Done():
+			log.Info("stopped certificate service")
+			return
 		case <-uptimeTicker.C:
-			ac.checkAndUpdateCertForAllDomains()
+			ac.checkAndUpdateCertForAllDomains(ctx)
 		}
 	}
 }
 
-func (ac *acmeChallenge) checkAndUpdateCertForAllDomains() {
+func (ac *acmeChallenge) checkAndUpdateCertForAllDomains(ctx context.Context) {
+	if ac.cluster != nil && !ac.cluster.waitForSoleIssuer(ctx) {
+		return
+	}
+
 	log.Info("starting cert validation!")
 
 	var wg sync.WaitGroup

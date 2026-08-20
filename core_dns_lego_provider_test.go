@@ -28,7 +28,7 @@ func TestNewCoreDnsLegoProviderGeneratesKey(t *testing.T) {
 	acc := newFakeAccount()
 	cfg := newProviderConfig("new@example.com")
 
-	p, err := newCoreDnsLegoProvider(cfg, acc, &map[string][]string{}, "test")
+	p, err := newCoreDnsLegoProvider(cfg, acc, newChallengeStore(), "test")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -45,12 +45,12 @@ func TestNewCoreDnsLegoProviderGeneratesKey(t *testing.T) {
 
 func TestNewCoreDnsLegoProviderLoadsExistingKey(t *testing.T) {
 	acc := newFakeAccount()
-	if _, err := newCoreDnsLegoProvider(newProviderConfig("me@example.com"), acc, &map[string][]string{}, "test"); err != nil {
+	if _, err := newCoreDnsLegoProvider(newProviderConfig("me@example.com"), acc, newChallengeStore(), "test"); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	acc.saveCalls = 0
 
-	p, err := newCoreDnsLegoProvider(newProviderConfig("me@example.com"), acc, &map[string][]string{}, "test")
+	p, err := newCoreDnsLegoProvider(newProviderConfig("me@example.com"), acc, newChallengeStore(), "test")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestNewCoreDnsLegoProviderBadStoredKey(t *testing.T) {
 	acc := newFakeAccount()
 	acc.keys["bad@example.com"] = []byte("not a valid pem key")
 
-	if _, err := newCoreDnsLegoProvider(newProviderConfig("bad@example.com"), acc, &map[string][]string{}, "test"); err == nil {
+	if _, err := newCoreDnsLegoProvider(newProviderConfig("bad@example.com"), acc, newChallengeStore(), "test"); err == nil {
 		t.Fatal("expected an error for an unparseable stored account key, got nil")
 	}
 }
