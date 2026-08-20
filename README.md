@@ -67,32 +67,35 @@ acmednschallenge {
 * `email` **EMAIL** **required**, the contact address registered with the ACME account.
 * `acceptedLetsEncryptToS` **required**, its presence records your agreement to the Let's Encrypt
   [Terms of Service](https://letsencrypt.org/privacy/).
-* `additionalSans` **SAN...** additional subject alternative names to include on the certificate,
-  for example `*.example.org`. Each SAN must be the managed domain, a wildcard of it, or a subdomain
-  of it.
-* `renewBeforeDays` **DAYS** renew this many days before expiry, an integer `>= 1`. Default `10`.
-  Values above `30` are accepted but not recommended, as they largely defeat renew-before-expiry.
-* `certValidationInterval` **DURATION** how often certificates are checked for renewal, a Go
-  [duration](https://pkg.go.dev/time#ParseDuration). Default `24h`.
-* `retryInterval` **DURATION** when issuing or renewing a certificate fails, retry this often until it
-  succeeds, a Go duration. Default `0`, which disables retrying (the domain is retried on the next
-  `certValidationInterval` tick instead).
-* `maxRetryCount` **COUNT** maximum number of retries per validation cycle when `retryInterval` is
-  set, a non-negative integer. Default `3`. After the retries are exhausted the domain is retried on
-  the next `certValidationInterval` tick.
-* `dnsTTL` **TTL** TTL of the challenge TXT record, an integer in `[60, 600]`. Default `120`.
-* `dnsTimeout` **DURATION** timeout for the DNS propagation check, a Go duration. Default `60s`.
-* `skipDnsPropagationTest` skip lego's DNS propagation pre-check. Takes no argument.
-* `useLetsEncryptTestServer` use the Let's Encrypt staging server. Takes no argument.
-* `customCAD` **URL** ACME CA directory URL to use instead of Let's Encrypt.
-* `allowInsecureCAD` disable TLS verification for `customCAD`. Do not use in production. Takes no
-  argument.
-* `customNameservers` **NAMESERVER...** nameservers to use for lego's propagation pre-check. For
-  development only.
-* `certificateStorage*` where issued certificates are stored — pick at most one backend. See
-  [Certificate storage](#certificate-storage).
-* `acmeAccountStorage*` where the ACME account key is stored, chosen independently — pick at most one
-  backend. See [Account-key storage](#account-key-storage).
+* `additionalSans` **SAN...** **optional**, additional subject alternative names to include on the
+  certificate, for example `*.example.org`. Each SAN must be the managed domain, a wildcard of it, or a
+  subdomain of it.
+* `renewBeforeDays` **DAYS** **optional**, renew this many days before expiry, an integer `>= 1`.
+  Default `10`. Values above `30` are accepted but not recommended, as they largely defeat
+  renew-before-expiry.
+* `certValidationInterval` **DURATION** **optional**, how often certificates are checked for renewal, a
+  Go [duration](https://pkg.go.dev/time#ParseDuration). Default `24h`.
+* `retryInterval` **DURATION** **optional**, when issuing or renewing a certificate fails, retry this
+  often until it succeeds, a Go duration. Default `0`, which disables retrying (the domain is retried on
+  the next `certValidationInterval` tick instead).
+* `maxRetryCount` **COUNT** **optional**, maximum number of retries per validation cycle when
+  `retryInterval` is set, a non-negative integer. Default `3`. After the retries are exhausted the
+  domain is retried on the next `certValidationInterval` tick.
+* `dnsTTL` **TTL** **optional**, TTL of the challenge TXT record, an integer in `[60, 600]`. Default
+  `120`.
+* `dnsTimeout` **DURATION** **optional**, timeout for the DNS propagation check, a Go duration. Default
+  `60s`.
+* `skipDnsPropagationTest` **optional**, skip lego's DNS propagation pre-check. Takes no argument.
+* `useLetsEncryptTestServer` **optional**, use the Let's Encrypt staging server. Takes no argument.
+* `customCAD` **URL** **optional**, ACME CA directory URL to use instead of Let's Encrypt.
+* `allowInsecureCAD` **optional**, disable TLS verification for `customCAD`. Do not use in production.
+  Takes no argument.
+* `customNameservers` **NAMESERVER...** **optional**, nameservers to use for lego's propagation
+  pre-check. For development only.
+* `certificateStorage*` **optional**, where issued certificates are stored — pick at most one backend.
+  See [Certificate storage](#certificate-storage).
+* `acmeAccountStorage*` **optional**, where the ACME account key is stored, chosen independently — pick
+  at most one backend. See [Account-key storage](#account-key-storage).
 
 ### Certificate storage
 
