@@ -3,7 +3,7 @@ description: Clone a pinned CoreDNS, drop this plugin in, set up Go, and prepare
 
 inputs:
   coredns-version:
-    description: CoreDNS git tag to build against (e.g. v1.14.6).
+    description: CoreDNS git tag to build against (e.g. v1.14.7).
     required: true
 
 runs:
