@@ -256,6 +256,8 @@ func TestParseConfigStorage(t *testing.T) {
 		{
 			name:                "acmeAccountStorageDisk with mode and group",
 			config:              "acmednschallenge {\nemail a@b.com\nacceptedLetsEncryptToS\nacmeAccountStorageDisk /srv/acme 640 3000\n}",
+			wantType:            "disk",
+			wantDiskPath:        defaultCertSavePath,
 			wantAccountType:     "disk",
 			wantAccountPath:     "/srv/acme",
 			wantAccountFileMode: 0640,
