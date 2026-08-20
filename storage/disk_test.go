@@ -13,7 +13,7 @@ func TestNewUnknownType(t *testing.T) {
 }
 
 func TestDiskRoundTrip(t *testing.T) {
-	s, err := New(Options{Type: "disk", DiskPath: t.TempDir(), CertFileMode: 0600, AccountFileMode: 0600})
+	s, err := New(Options{Type: "disk", DiskPath: t.TempDir(), FileMode: 0600})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -54,7 +54,10 @@ func TestNewAccountDisk(t *testing.T) {
 }
 
 func TestDiskAccountRoundTrip(t *testing.T) {
-	a := NewDiskAccount(t.TempDir())
+	a, err := NewDiskAccount(t.TempDir(), 0600, 0)
+	if err != nil {
+		t.Fatalf("NewDiskAccount: %v", err)
+	}
 
 	if a.LoadAccountKey("test@test.com") != nil {
 		t.Fatal("expected nil for absent account key")

@@ -51,6 +51,16 @@ acmednschallenge {
     customCAD URL
     allowInsecureCAD
     customNameservers NAMESERVER...
+
+    # certificate storage — choose at most one (default: certificateStorageDisk /var/lib/coredns/certs)
+    certificateStorageDisk PATH [MODE] [GROUP]
+    certificateStorageKubernetes NAMESPACE
+    certificateStorageVault MOUNT PREFIX [token|kubernetes ROLE]
+
+    # account-key storage — choose at most one (default: acmeAccountStorageDisk /var/lib/coredns/acme-user)
+    acmeAccountStorageDisk PATH [MODE] [GROUP]
+    acmeAccountStorageKubernetes NAMESPACE
+    acmeAccountStorageVault MOUNT PREFIX [token|kubernetes ROLE]
 }
 ~~~
 
@@ -79,23 +89,26 @@ acmednschallenge {
   argument.
 * `customNameservers` **NAMESERVER...** nameservers to use for lego's propagation pre-check. For
   development only.
+* `certificateStorage*` where issued certificates are stored — pick at most one backend. See
+  [Certificate storage](#certificate-storage).
+* `acmeAccountStorage*` where the ACME account key is stored, chosen independently — pick at most one
+  backend. See [Account-key storage](#account-key-storage).
 
 ### Certificate storage
 
 Where issued certificates are stored. Set at most one; defaults to
 `certificateStorageDisk /var/lib/coredns/certs`.
 
-* `certificateStorageDisk` **PATH** `[CERT_MODE]` `[ACCOUNT_MODE]` `[GROUP]` write certificate files
-  under **PATH**`/certs`. **PATH** must be absolute. The optional **CERT_MODE** sets the mode of the
-  `.key`/`.pem` files and the `certs` directory (which additionally gets the matching execute bits:
-  `600`→`700`, `640`→`750`, `644`→`755`), one of `600`, `640`, `644` (default `600`). The optional
-  **ACCOUNT_MODE** sets the mode of the `.json` files, same values (default `600`). The optional
-  **GROUP** (group name or numeric gid) sets the group owner of the cert files and directory via
-  `chgrp`; the file owner is left unchanged, so a non-root CoreDNS keeps full access. **GROUP** is only
-  accepted when **CERT_MODE** or **ACCOUNT_MODE** grants group access (`640` or `644`) — it is rejected
-  when both are `600`, since the group would have no way to read the files. On startup the configured
-  mode and group are re-applied to any existing files, so changing them in the config takes effect on
-  restart. Account/user data is unaffected — it is always `600` and owned by the CoreDNS user.
+* `certificateStorageDisk` **PATH** `[MODE]` `[GROUP]` write certificate files under **PATH**`/certs`.
+  **PATH** must be absolute. The optional **MODE** sets the mode of the cert files (`.key`/`.pem`/`.json`)
+  and the `certs` directory (which additionally gets the matching execute bits: `600`→`700`, `640`→`750`,
+  `644`→`755`), one of `600`, `640`, `644` (default `600`). The optional **GROUP** (group name or numeric
+  gid) sets the group owner of the cert files and directory via `chgrp`; the file owner is left
+  unchanged, so a non-root CoreDNS keeps full access. **GROUP** is only accepted when **MODE** grants
+  group access (`640` or `644`) — it is rejected with `600`, since the group would have no way to read
+  the files. On startup the configured mode and group are re-applied to any existing files, so changing
+  them in the config takes effect on restart. The account key has its own independent mode/group — see
+  [`acmeAccountStorageDisk`](#account-key-storage).
 * `certificateStorageKubernetes` **NAMESPACE** store one `kubernetes.io/tls` Secret per domain in
   **NAMESPACE** (`tls.crt`, `tls.key`, and `acme.json` renewal metadata). Uses in-cluster config,
   falling back to the default kubeconfig (`KUBECONFIG`, `~/.kube/config`) out of cluster.
@@ -106,13 +119,16 @@ Where issued certificates are stored. Set at most one; defaults to
 ### Account-key storage
 
 Where the ACME account key is stored, chosen independently of certificate storage. Set at most one;
-defaults to `accountStorageDisk /var/lib/coredns/acme-user`.
+defaults to `acmeAccountStorageDisk /var/lib/coredns/acme-user`.
 
-* `accountStorageDisk` **PATH** write the account key to **PATH**`/users/`*email*`/key.pem`. **PATH**
-  must be absolute.
-* `accountStorageKubernetes` **NAMESPACE** store the account key as an `Opaque` Secret
+* `acmeAccountStorageDisk` **PATH** `[MODE]` `[GROUP]` write the account key to
+  **PATH**`/users/`*email*`/key.pem`. **PATH** must be absolute. The optional **MODE** and **GROUP**
+  work exactly as for [`certificateStorageDisk`](#certificate-storage) — **MODE** (`600`/`640`/`644`,
+  default `600`) sets the mode of `key.pem` and the `users` directories (with matching execute bits),
+  **GROUP** sets their group owner, and both are re-applied to existing files on startup.
+* `acmeAccountStorageKubernetes` **NAMESPACE** store the account key as an `Opaque` Secret
   (`acme-account-`*email*) in **NAMESPACE**.
-* `accountStorageVault` **MOUNT** **PREFIX** `[token|kubernetes ROLE]` store the account key at
+* `acmeAccountStorageVault` **MOUNT** **PREFIX** `[token|kubernetes ROLE]` store the account key at
   **MOUNT**`/data/`**PREFIX**`/`*email*. See [Vault / OpenBao](#vault--openbao).
 
 ### Vault / OpenBao
@@ -153,7 +169,7 @@ example.org:53 {
         email admin@example.org
         acceptedLetsEncryptToS
         certificateStorageKubernetes cert-manager
-        accountStorageVault secret coredns/acme kubernetes coredns
+        acmeAccountStorageVault secret coredns/acme kubernetes coredns
     }
 
     forward . 127.0.0.1:5300
@@ -189,7 +205,7 @@ issuance fails. Then rebuild with `go generate && go build`, or `make`.
             acceptedLetsEncryptToS
             additionalSans *.example.org
             certificateStorageDisk /tmp/coredns-certs
-            accountStorageDisk /tmp/coredns-acme
+            acmeAccountStorageDisk /tmp/coredns-acme
             customCAD https://localhost:14000/dir
             allowInsecureCAD
             skipDnsPropagationTest
@@ -206,7 +222,7 @@ issuance fails. Then rebuild with `go generate && go build`, or `make`.
     Notes:
     * Port `5354` (not `53`): `53`/`5354`... `53` needs root and, together with `5353`, clashes with
       the mDNS/Bonjour resolver on macOS. Any free high port works.
-    * `accountStorageDisk` keeps the ACME account key off the default `/var/lib/coredns` path, which
+    * `acmeAccountStorageDisk` keeps the ACME account key off the default `/var/lib/coredns` path, which
       needs root.
     * `skipDnsPropagationTest` disables lego's *authoritative-nameserver* propagation check — that
       check resolves the zone's `NS` and queries it on port `53`, which can't reach CoreDNS on `5354`.

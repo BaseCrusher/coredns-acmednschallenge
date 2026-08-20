@@ -15,10 +15,9 @@ type CertStorage interface {
 type Options struct {
 	Type string
 
-	DiskPath        string
-	CertFileMode    fs.FileMode
-	AccountFileMode fs.FileMode
-	GroupId         int
+	DiskPath string
+	FileMode fs.FileMode
+	GroupId  int
 
 	Namespace string
 
@@ -31,7 +30,7 @@ type Options struct {
 func New(o Options) (CertStorage, error) {
 	switch o.Type {
 	case "disk":
-		return NewDisk(o.DiskPath, o.CertFileMode, o.AccountFileMode, o.GroupId)
+		return NewDisk(o.DiskPath, o.FileMode, o.GroupId)
 	case "kubernetesSecrets":
 		return NewSecrets(o.Namespace)
 	case "vault":

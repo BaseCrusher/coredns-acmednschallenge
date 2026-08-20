@@ -4,7 +4,7 @@ example.org:5354 {
         acceptedLetsEncryptToS
         additionalSans *.example.org
         certificateStorageVault secret coredns/acme
-        accountStorageDisk /tmp/coredns-acme-vault
+        acmeAccountStorageDisk /tmp/coredns-acme-vault
         customCAD https://127.0.0.1:14000/dir
         allowInsecureCAD
         skipDnsPropagationTest

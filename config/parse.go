@@ -15,14 +15,14 @@ import (
 func ParseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 	cfg := &ACMEChallengeConfig{
 		Storage: storage.Options{
-			Type:            "disk",
-			DiskPath:        defaultCertSavePath,
-			CertFileMode:    os.FileMode(0600),
-			AccountFileMode: os.FileMode(0600),
+			Type:     "disk",
+			DiskPath: defaultCertSavePath,
+			FileMode: os.FileMode(0600),
 		},
 		Account: storage.Options{
 			Type:     "disk",
 			DiskPath: defaultUserDataPath,
+			FileMode: os.FileMode(0600),
 		},
 		RenewBeforeDays:          defaultRenewBeforeDays,
 		DnsTTL:                   120,
@@ -62,7 +62,7 @@ func ParseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 	}
 
 	var certificateStorageDiskSet, certificateStorageKubernetesSet, certificateStorageVaultSet bool
-	var userDiskSet, userKubernetesSet, accountStorageVaultSet bool
+	var userDiskSet, userKubernetesSet, acmeAccountStorageVaultSet bool
 
 	c.Next()
 	for c.NextBlock() {
@@ -78,29 +78,8 @@ func ParseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 			cfg.Storage.Type = "disk"
 			cfg.Storage.DiskPath = p
 			certificateStorageDiskSet = true
-			if c.NextArg() {
-				mode, ok := parseFileMode(c.Val())
-				if !ok {
-					return nil, c.Errf("certificateStorageDisk cert file mode must be 600, 640 or 644 but the value is: %v", c.Val())
-				}
-				cfg.Storage.CertFileMode = mode
-			}
-			if c.NextArg() {
-				mode, ok := parseFileMode(c.Val())
-				if !ok {
-					return nil, c.Errf("certificateStorageDisk account file mode must be 600, 640 or 644 but the value is: %v", c.Val())
-				}
-				cfg.Storage.AccountFileMode = mode
-			}
-			if c.NextArg() {
-				if cfg.Storage.CertFileMode&0o070 == 0 && cfg.Storage.AccountFileMode&0o070 == 0 {
-					return nil, c.Errf("certificateStorageDisk group can only be set when a file mode grants group access (640 or 644), but the modes are %#o and %#o", cfg.Storage.CertFileMode.Perm(), cfg.Storage.AccountFileMode.Perm())
-				}
-				gid, err := lookupGid(c.Val())
-				if err != nil {
-					return nil, c.Errf("certificateStorageDisk group must be an existing group name or numeric gid: %v", err)
-				}
-				cfg.Storage.GroupId = gid
+			if err := parseDiskModeAndGroup(c, &cfg.Storage, "certificateStorageDisk"); err != nil {
+				return nil, err
 			}
 		case "certificateStorageKubernetes":
 			if !c.NextArg() {
@@ -109,18 +88,21 @@ func ParseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 			cfg.Storage.Type = "kubernetesSecrets"
 			cfg.Storage.Namespace = c.Val()
 			certificateStorageKubernetesSet = true
-		case "accountStorageDisk":
+		case "acmeAccountStorageDisk":
 			if !c.NextArg() {
 				return nil, c.ArgErr()
 			}
 			p := c.Val()
 			if !filepath.IsAbs(p) {
-				return nil, c.Errf("accountStorageDisk path must be an absolute path: %v", p)
+				return nil, c.Errf("acmeAccountStorageDisk path must be an absolute path: %v", p)
 			}
 			cfg.Account.Type = "disk"
 			cfg.Account.DiskPath = p
 			userDiskSet = true
-		case "accountStorageKubernetes":
+			if err := parseDiskModeAndGroup(c, &cfg.Account, "acmeAccountStorageDisk"); err != nil {
+				return nil, err
+			}
+		case "acmeAccountStorageKubernetes":
 			if !c.NextArg() {
 				return nil, c.ArgErr()
 			}
@@ -132,11 +114,11 @@ func ParseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 				return nil, err
 			}
 			certificateStorageVaultSet = true
-		case "accountStorageVault":
+		case "acmeAccountStorageVault":
 			if err := parseVaultOptions(c, &cfg.Account); err != nil {
 				return nil, err
 			}
-			accountStorageVaultSet = true
+			acmeAccountStorageVaultSet = true
 		case "renewBeforeDays":
 			if !c.NextArg() {
 				return nil, c.ArgErr()
@@ -287,8 +269,8 @@ func ParseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 		return nil, c.Err("only one certificate storage backend may be set (certificateStorageDisk, certificateStorageKubernetes, certificateStorageVault)")
 	}
 
-	if countTrue(userDiskSet, userKubernetesSet, accountStorageVaultSet) > 1 {
-		return nil, c.Err("only one account storage backend may be set (accountStorageDisk, accountStorageKubernetes, accountStorageVault)")
+	if countTrue(userDiskSet, userKubernetesSet, acmeAccountStorageVaultSet) > 1 {
+		return nil, c.Err("only one account storage backend may be set (acmeAccountStorageDisk, acmeAccountStorageKubernetes, acmeAccountStorageVault)")
 	}
 
 	if cfg.Email == "" {

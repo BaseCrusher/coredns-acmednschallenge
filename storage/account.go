@@ -10,7 +10,7 @@ type AccountStorage interface {
 func NewAccount(o Options) (AccountStorage, error) {
 	switch o.Type {
 	case "disk":
-		return NewDiskAccount(o.DiskPath), nil
+		return NewDiskAccount(o.DiskPath, o.FileMode, o.GroupId)
 	case "kubernetesSecrets":
 		return NewSecretsAccount(o.Namespace)
 	case "vault":

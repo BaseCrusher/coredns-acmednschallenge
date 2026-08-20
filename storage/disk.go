@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -18,26 +19,20 @@ import (
 var log = clog.NewWithPlugin("acmednschallenge")
 
 type Disk struct {
-	certsPath    string
-	certFileMode fs.FileMode
-	jsonFileMode fs.FileMode
-	groupId      int
+	certsPath string
+	fileMode  fs.FileMode
+	groupId   int
 }
 
-func NewDisk(dataPath string, certFileMode, jsonFileMode fs.FileMode, groupId int) (*Disk, error) {
+func NewDisk(dataPath string, fileMode fs.FileMode, groupId int) (*Disk, error) {
 	certsPath := filepath.Join(dataPath, "certs")
-	if err := os.MkdirAll(certsPath, dirMode(certFileMode)); err != nil {
+	if err := os.MkdirAll(certsPath, dirMode(fileMode)); err != nil {
 		return nil, fmt.Errorf("could not create certificates directory at %s: %w", certsPath, err)
 	}
-	if err := os.Chmod(certsPath, dirMode(certFileMode)); err != nil {
-		return nil, fmt.Errorf("could not set mode on %s: %w", certsPath, err)
+	if err := applyPerms(certsPath, dirMode(fileMode), groupId); err != nil {
+		return nil, err
 	}
-	if groupId > 0 {
-		if err := os.Chown(certsPath, -1, groupId); err != nil {
-			return nil, fmt.Errorf("could not set group %d on %s: %w", groupId, certsPath, err)
-		}
-	}
-	d := &Disk{certsPath: certsPath, certFileMode: certFileMode, jsonFileMode: jsonFileMode, groupId: groupId}
+	d := &Disk{certsPath: certsPath, fileMode: fileMode, groupId: groupId}
 	if err := d.reconcile(); err != nil {
 		return nil, err
 	}
@@ -53,24 +48,23 @@ func (d *Disk) reconcile() error {
 		if e.IsDir() {
 			continue
 		}
-		p := filepath.Join(d.certsPath, e.Name())
-		if err := os.Chmod(p, d.modeFor(e.Name())); err != nil {
-			return fmt.Errorf("could not set mode on %s: %w", p, err)
-		}
-		if d.groupId > 0 {
-			if err := os.Chown(p, -1, d.groupId); err != nil {
-				return fmt.Errorf("could not set group %d on %s: %w", d.groupId, p, err)
-			}
+		if err := applyPerms(filepath.Join(d.certsPath, e.Name()), d.fileMode, d.groupId); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-func (d *Disk) modeFor(name string) fs.FileMode {
-	if filepath.Ext(name) == ".json" {
-		return d.jsonFileMode
+func applyPerms(path string, mode fs.FileMode, groupId int) error {
+	if err := os.Chmod(path, mode); err != nil {
+		return fmt.Errorf("could not set mode on %s: %w", path, err)
 	}
-	return d.certFileMode
+	if groupId > 0 {
+		if err := os.Chown(path, -1, groupId); err != nil {
+			return fmt.Errorf("could not set group %d on %s: %w", groupId, path, err)
+		}
+	}
+	return nil
 }
 
 func dirMode(m fs.FileMode) fs.FileMode {
@@ -144,17 +138,11 @@ func (d *Disk) readFile(domain, extension string) ([]byte, error) {
 }
 
 func (d *Disk) writeFile(domain, extension string, data []byte) error {
-	name := getFileName(domain, extension)
-	path := filepath.Join(d.certsPath, name)
-	if err := os.WriteFile(path, data, d.modeFor(name)); err != nil {
+	path := filepath.Join(d.certsPath, getFileName(domain, extension))
+	if err := os.WriteFile(path, data, d.fileMode); err != nil {
 		return err
 	}
-	if d.groupId > 0 {
-		if err := os.Chown(path, -1, d.groupId); err != nil {
-			return fmt.Errorf("could not set group %d on %s: %w", d.groupId, path, err)
-		}
-	}
-	return nil
+	return applyPerms(path, d.fileMode, d.groupId)
 }
 
 func getFileName(domain, extension string) string {
@@ -172,10 +160,33 @@ func sanitizedDomain(domain string) string {
 
 type DiskAccount struct {
 	dataPath string
+	fileMode fs.FileMode
+	groupId  int
 }
 
-func NewDiskAccount(dataPath string) *DiskAccount {
-	return &DiskAccount{dataPath: dataPath}
+func NewDiskAccount(dataPath string, fileMode fs.FileMode, groupId int) (*DiskAccount, error) {
+	d := &DiskAccount{dataPath: dataPath, fileMode: fileMode, groupId: groupId}
+	if err := d.reconcile(); err != nil {
+		return nil, err
+	}
+	return d, nil
+}
+
+func (d *DiskAccount) reconcile() error {
+	root := filepath.Join(d.dataPath, "users")
+	if _, err := os.Stat(root); errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	return filepath.WalkDir(root, func(p string, e fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		mode := d.fileMode
+		if e.IsDir() {
+			mode = dirMode(d.fileMode)
+		}
+		return applyPerms(p, mode, d.groupId)
+	})
 }
 
 func (d *DiskAccount) keyPath(email string) string {
@@ -184,13 +195,19 @@ func (d *DiskAccount) keyPath(email string) string {
 
 func (d *DiskAccount) SaveAccountKey(email string, keyPEM []byte) error {
 	keyFile := d.keyPath(email)
-	if err := os.MkdirAll(filepath.Dir(keyFile), os.ModePerm); err != nil {
+	emailDir := filepath.Dir(keyFile)
+	if err := os.MkdirAll(emailDir, dirMode(d.fileMode)); err != nil {
 		return fmt.Errorf("could not create account key directory: %w", err)
 	}
-	if err := os.WriteFile(keyFile, keyPEM, 0600); err != nil {
+	for _, dir := range []string{filepath.Dir(emailDir), emailDir} {
+		if err := applyPerms(dir, dirMode(d.fileMode), d.groupId); err != nil {
+			return err
+		}
+	}
+	if err := os.WriteFile(keyFile, keyPEM, d.fileMode); err != nil {
 		return fmt.Errorf("could not write account key: %w", err)
 	}
-	return nil
+	return applyPerms(keyFile, d.fileMode, d.groupId)
 }
 
 func (d *DiskAccount) LoadAccountKey(email string) []byte {
