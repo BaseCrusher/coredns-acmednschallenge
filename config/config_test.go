@@ -123,6 +123,7 @@ func TestParseConfigClusterMode(t *testing.T) {
 		wantSvc   string
 		wantPort  int
 		wantIP    string
+		wantDelay time.Duration
 	}{
 		{
 			name:    "off by default",
@@ -154,6 +155,13 @@ func TestParseConfigClusterMode(t *testing.T) {
 			wantSvc:  "coredns.default.svc",
 			wantPort: 9000,
 			wantIP:   "10.0.0.5",
+		},
+		{
+			name:      "service with custom startup delay",
+			config:    "acmednschallenge {\nemail a@b.com\nacceptedLetsEncryptToS\nclusterMode coredns.default.svc 30s\n}",
+			wantSvc:   "coredns.default.svc",
+			wantPort:  defaultClusterAPIPort,
+			wantDelay: 30 * time.Second,
 		},
 		{
 			name:      "missing service rejected",
@@ -199,6 +207,13 @@ func TestParseConfigClusterMode(t *testing.T) {
 			}
 			if cfg.Cluster.OwnIP != tc.wantIP {
 				t.Errorf("OwnIP = %q, want %q", cfg.Cluster.OwnIP, tc.wantIP)
+			}
+			wantDelay := tc.wantDelay
+			if wantDelay == 0 {
+				wantDelay = defaultClusterStartupDelay
+			}
+			if cfg.Cluster.StartupDelay != wantDelay {
+				t.Errorf("StartupDelay = %v, want %v", cfg.Cluster.StartupDelay, wantDelay)
 			}
 		})
 	}

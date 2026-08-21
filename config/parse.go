@@ -265,18 +265,32 @@ func ParseConfig(c *caddy.Controller) (*ACMEChallengeConfig, error) {
 			if !c.NextArg() {
 				return nil, c.ArgErr()
 			}
-			cc := &ClusterConfig{PeerService: c.Val(), APIPort: defaultClusterAPIPort}
+			cc := &ClusterConfig{
+				PeerService:  c.Val(),
+				APIPort:      defaultClusterAPIPort,
+				StartupDelay: defaultClusterStartupDelay,
+			}
 			for c.NextArg() {
 				v := c.Val()
+				if n, err := strconv.Atoi(v); err == nil {
+					if n < 1 || n > 65535 {
+						return nil, c.Errf("invalid clusterMode port, expected 1-65535 but got: %v", v)
+					}
+					cc.APIPort = n
+					continue
+				}
+				if d, err := time.ParseDuration(v); err == nil {
+					if d < 0 {
+						return nil, c.Errf("invalid clusterMode startup delay, must not be negative: %v", v)
+					}
+					cc.StartupDelay = d
+					continue
+				}
 				if net.ParseIP(v) != nil {
 					cc.OwnIP = v
 					continue
 				}
-				port, err := strconv.Atoi(v)
-				if err != nil || port < 1 || port > 65535 {
-					return nil, c.Errf("invalid clusterMode argument, expected a port (1-65535) or an IP address but got: %v", v)
-				}
-				cc.APIPort = port
+				return nil, c.Errf("invalid clusterMode argument, expected a port, duration, or IP address but got: %v", v)
 			}
 			cfg.Cluster = cc
 		default:

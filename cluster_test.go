@@ -1,7 +1,6 @@
 package acmednschallenge
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -27,7 +26,7 @@ func newClusterTestbed(ips ...string) map[string]*testNode {
 		nodes[ip] = &testNode{
 			ip:    ip,
 			alive: true,
-			c:     &cluster{ac: ac, tick: time.Millisecond, settle: 0, role: roleFollower},
+			c:     &cluster{ac: ac, tick: time.Millisecond},
 		}
 	}
 
@@ -42,16 +41,21 @@ func newClusterTestbed(ips ...string) map[string]*testNode {
 			}
 			return pn.c.localStatus(), true
 		}
-		node.c.postChallenges = func(peer string, rec map[string][]string) {
+		node.c.postChallenges = func(peer, fqdn string, values []string, deleted bool, issuerIP string) {
 			if pn := nodes[peer]; pn != nil && pn.alive {
-				pn.c.ac.challenges.replace(rec)
+				if issuerIP != "" {
+					pn.c.mu.Lock()
+					pn.c.knownIssuer = issuerIP
+					pn.c.mu.Unlock()
+				}
+				if deleted {
+					pn.c.ac.challenges.applyDelete(fqdn)
+				} else {
+					pn.c.ac.challenges.applySet(fqdn, values)
+				}
 			}
 		}
-		node.c.ac.challenges.setOnChange(func() {
-			if node.c.currentRole() == roleLeaderActive {
-				node.c.pushToPeers()
-			}
-		})
+		node.c.ac.challenges.setOnChange(node.c.pushUpdate)
 	}
 	return nodes
 }
@@ -67,77 +71,113 @@ func waitFor(t *testing.T, msg string, cond func() bool) {
 	t.Fatalf("timed out waiting: %s", msg)
 }
 
-func TestClusterElection(t *testing.T) {
+func TestCanIssueOnlyLowestIP(t *testing.T) {
 	nodes := newClusterTestbed("10.0.0.1", "10.0.0.2")
 	a, b := nodes["10.0.0.1"], nodes["10.0.0.2"]
 
-	for i := 0; i < 4; i++ {
-		a.c.reconcile()
-		b.c.reconcile()
+	if !a.c.canIssue() {
+		t.Error("A (lowest IP) canIssue = false, want true")
 	}
-
-	if a.c.currentRole() != roleLeaderActive {
-		t.Errorf("A (lowest IP) role = %v, want LEADER_ACTIVE", a.c.currentRole())
-	}
-	if b.c.currentRole() != roleFollower {
-		t.Errorf("B role = %v, want FOLLOWER", b.c.currentRole())
+	if b.c.canIssue() {
+		t.Error("B (higher IP) canIssue = true, want false")
 	}
 }
 
-func TestClusterTwoLeadersLowestWins(t *testing.T) {
+func TestCanIssueBlockedByPeerIssuing(t *testing.T) {
 	nodes := newClusterTestbed("10.0.0.1", "10.0.0.2")
 	a, b := nodes["10.0.0.1"], nodes["10.0.0.2"]
-	a.c.role = roleLeaderActive
-	b.c.role = roleLeaderActive
 
-	b.c.reconcile()
-	if b.c.currentRole() != roleFollower {
-		t.Errorf("higher-IP B role = %v, want demoted to FOLLOWER", b.c.currentRole())
-	}
-	a.c.reconcile()
-	if a.c.currentRole() != roleLeaderActive {
-		t.Errorf("lowest-IP A role = %v, want still LEADER_ACTIVE", a.c.currentRole())
+	b.c.beginIssue()
+	if a.c.canIssue() {
+		t.Error("A canIssue = true while peer B is issuing, want false")
 	}
 }
 
-func TestClusterNoDemotionMidChallenge(t *testing.T) {
-	nodes := newClusterTestbed("10.0.0.1", "10.0.0.2")
-	a, b := nodes["10.0.0.1"], nodes["10.0.0.2"]
-	a.c.role = roleLeaderActive
-	b.c.role = roleLeaderActive
-	b.c.ac.challenges.add("_acme-challenge.x.example.com.", "token")
+func TestCanIssueNewLowerIPDefersToActiveIssuer(t *testing.T) {
+	nodes := newClusterTestbed("10.0.0.5", "10.0.0.8")
+	nodes["10.0.0.5"].c.beginIssue()
 
-	b.c.reconcile()
-	if b.c.currentRole() != roleLeaderActive {
-		t.Errorf("B role = %v, want LEADER_ACTIVE (no demotion mid-challenge)", b.c.currentRole())
+	all := []string{"10.0.0.1", "10.0.0.5", "10.0.0.8"}
+	newcomer := &cluster{
+		resolvePeers: func() ([]string, error) { return all, nil },
+		isLocal:      func(x string) bool { return x == "10.0.0.1" },
+		getStatus: func(peer string) (statusResponse, bool) {
+			if pn := nodes[peer]; pn != nil {
+				return pn.c.localStatus(), true
+			}
+			return statusResponse{}, false
+		},
+	}
+	if newcomer.canIssue() {
+		t.Error("newcomer with lowest IP issued while a peer was already issuing, want defer")
 	}
 }
 
-func TestClusterFollowerMirrorsAndRemoval(t *testing.T) {
+func TestCanIssueOwnIPMissing(t *testing.T) {
+	nodes := newClusterTestbed("10.0.0.1")
+	a := nodes["10.0.0.1"]
+	a.c.resolvePeers = func() ([]string, error) { return []string{"10.9.9.9"}, nil }
+	if a.c.canIssue() {
+		t.Error("canIssue = true when own IP absent from peers, want false")
+	}
+}
+
+func TestCleanStaleChallengesClearsWhenIssuerGone(t *testing.T) {
 	nodes := newClusterTestbed("10.0.0.1", "10.0.0.2")
 	a, b := nodes["10.0.0.1"], nodes["10.0.0.2"]
-	a.c.role = roleLeaderActive
-	b.c.role = roleFollower
 	fqdn := "_acme-challenge.x.example.com."
 
-	a.c.ac.challenges.replace(map[string][]string{fqdn: {"v1"}})
-	b.c.reconcile()
-	if v, ok := b.c.ac.challenges.get(fqdn); !ok || len(v) != 1 || v[0] != "v1" {
-		t.Errorf("follower did not mirror record: got %v ok=%v", v, ok)
-	}
+	a.c.beginIssue()
+	a.c.myIP = "10.0.0.1"
+	a.c.ac.challenges.add(fqdn, "v1")
+	waitFor(t, "follower to receive issuer push", func() bool {
+		_, ok := b.c.ac.challenges.get(fqdn)
+		return ok
+	})
+	a.alive = false
 
-	a.c.ac.challenges.replace(map[string][]string{})
-	b.c.reconcile()
+	b.c.cleanStaleChallenges()
 	if _, ok := b.c.ac.challenges.get(fqdn); ok {
-		t.Error("follower did not mirror removal")
+		t.Error("follower did not clear stale record after issuer went away")
 	}
 }
 
-func TestClusterLeaderPush(t *testing.T) {
+func TestCleanStaleChallengesKeepsWhileIssuerActive(t *testing.T) {
 	nodes := newClusterTestbed("10.0.0.1", "10.0.0.2")
 	a, b := nodes["10.0.0.1"], nodes["10.0.0.2"]
-	a.c.role = roleLeaderActive
-	b.c.role = roleFollower
+	fqdn := "_acme-challenge.x.example.com."
+
+	a.c.beginIssue()
+	a.c.myIP = "10.0.0.1"
+	a.c.ac.challenges.add(fqdn, "v1")
+	waitFor(t, "follower to receive issuer push", func() bool {
+		_, ok := b.c.ac.challenges.get(fqdn)
+		return ok
+	})
+
+	b.c.cleanStaleChallenges()
+	if _, ok := b.c.ac.challenges.get(fqdn); !ok {
+		t.Error("follower cleared record while issuer still active")
+	}
+}
+
+func TestCleanStaleChallengesIssuerKeepsOwn(t *testing.T) {
+	nodes := newClusterTestbed("10.0.0.1", "10.0.0.2")
+	a := nodes["10.0.0.1"]
+	fqdn := "_acme-challenge.x.example.com."
+
+	a.c.beginIssue()
+	a.c.ac.challenges.replace(map[string][]string{fqdn: {"v1"}})
+
+	a.c.cleanStaleChallenges()
+	if _, ok := a.c.ac.challenges.get(fqdn); !ok {
+		t.Error("issuer cleared its own in-flight record")
+	}
+}
+
+func TestClusterPush(t *testing.T) {
+	nodes := newClusterTestbed("10.0.0.1", "10.0.0.2")
+	a, b := nodes["10.0.0.1"], nodes["10.0.0.2"]
 	fqdn := "_acme-challenge.x.example.com."
 
 	a.c.ac.challenges.add(fqdn, "pushed")
@@ -147,59 +187,37 @@ func TestClusterLeaderPush(t *testing.T) {
 	})
 }
 
-func TestClusterWaitForSoleIssuerReleases(t *testing.T) {
+func TestClusterPushMultipleDomainsMerge(t *testing.T) {
 	nodes := newClusterTestbed("10.0.0.1", "10.0.0.2")
 	a, b := nodes["10.0.0.1"], nodes["10.0.0.2"]
-	b.c.role = roleLeaderActive
-	b.c.ac.challenges.add("_acme-challenge.x.example.com.", "token")
+	fqdnA := "_acme-challenge.a.example.com."
+	fqdnB := "_acme-challenge.b.example.com."
 
-	a.c.reconcile()
-	if !a.c.otherNodeIssuing() {
-		t.Fatal("A should observe B issuing")
-	}
+	a.c.ac.challenges.add(fqdnA, "va")
+	a.c.ac.challenges.add(fqdnB, "vb")
 
-	done := make(chan bool, 1)
-	go func() { done <- a.c.waitForSoleIssuer(context.Background()) }()
-	select {
-	case <-done:
-		t.Fatal("waitForSoleIssuer returned while peer still issuing")
-	case <-time.After(10 * time.Millisecond):
-	}
-
-	b.c.ac.challenges.remove("_acme-challenge.x.example.com.")
-	a.c.reconcile()
-	if !<-done {
-		t.Error("waitForSoleIssuer should return true once peer stopped issuing")
-	}
+	waitFor(t, "follower to receive both records", func() bool {
+		_, okA := b.c.ac.challenges.get(fqdnA)
+		_, okB := b.c.ac.challenges.get(fqdnB)
+		return okA && okB
+	})
 }
 
-func TestClusterWaitForSoleIssuerCancels(t *testing.T) {
+func TestConcurrentIssuersBothDomainsPublished(t *testing.T) {
 	nodes := newClusterTestbed("10.0.0.1", "10.0.0.2")
 	a, b := nodes["10.0.0.1"], nodes["10.0.0.2"]
-	b.c.role = roleLeaderActive
-	b.c.ac.challenges.add("_acme-challenge.x.example.com.", "token")
-	a.c.reconcile()
+	fqdnA := "_acme-challenge.a.example.com."
+	fqdnB := "_acme-challenge.b.example.com."
 
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan bool, 1)
-	go func() { done <- a.c.waitForSoleIssuer(ctx) }()
-	cancel()
-	if <-done {
-		t.Error("waitForSoleIssuer should return false when ctx is cancelled")
-	}
-}
+	b.c.ac.challenges.add(fqdnB, "vb")
+	a.c.ac.challenges.add(fqdnA, "va")
 
-func TestClusterLeaderLossReElects(t *testing.T) {
-	nodes := newClusterTestbed("10.0.0.1", "10.0.0.2")
-	a, b := nodes["10.0.0.1"], nodes["10.0.0.2"]
-	a.c.role = roleLeaderActive
-	b.c.role = roleFollower
-	b.c.reconcile()
-
-	a.alive = false
-	b.c.reconcile()
-	b.c.reconcile()
-	if b.c.currentRole() != roleLeaderActive {
-		t.Errorf("B role = %v, want LEADER_ACTIVE after leader loss", b.c.currentRole())
+	for name, node := range map[string]*testNode{"A": a, "B": b} {
+		n := node
+		waitFor(t, "node "+name+" to publish both TXT records", func() bool {
+			_, okA := n.c.ac.challenges.get(fqdnA)
+			_, okB := n.c.ac.challenges.get(fqdnB)
+			return okA && okB
+		})
 	}
 }

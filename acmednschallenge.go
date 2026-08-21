@@ -130,10 +130,6 @@ func (ac *acmeChallenge) start(ctx context.Context) {
 }
 
 func (ac *acmeChallenge) checkAndUpdateCertForAllDomains(ctx context.Context) {
-	if ac.cluster != nil && !ac.cluster.waitForSoleIssuer(ctx) {
-		return
-	}
-
 	log.Info("starting cert validation!")
 
 	var wg sync.WaitGroup
@@ -173,22 +169,30 @@ func (ac *acmeChallenge) updateCertForDomain(domain string) {
 
 func (ac *acmeChallenge) checkAndCreateOrRenewCert(domain string) (bool, *certificate.Resource, error) {
 	certs := ac.storage.Load(domain)
+	if certs != nil && checkIfCertIsValid(ac, certs) {
+		log.Infof("Loaded certificate for %s, still valid", domain)
+		return false, certs, nil
+	}
+
+	if ac.cluster != nil {
+		if !ac.cluster.canIssue() {
+			return false, nil, nil
+		}
+		ac.cluster.beginIssue()
+		defer ac.cluster.endIssue()
+	}
+
 	if certs == nil {
 		log.Infof("No certificate found for %s, obtaining new one", domain)
 		certs, err := ac.coreDNSProvider.obtainNewCertificate(domain)
 		return true, certs, err
-	} else {
-		log.Infof("Loaded certificate for %s", domain)
-		if !checkIfCertIsValid(ac, certs) {
-			certs, err := ac.coreDNSProvider.renewCertificate(certs)
-			if err != nil {
-				log.Errorf("Error renewing certificate. the cert for the domain '%s' is probably to old. Trying to obtain a new one.", domain)
-				certs, err := ac.coreDNSProvider.obtainNewCertificate(domain)
-				return true, certs, err
-			}
-			return true, certs, err
-		}
-
-		return false, certs, nil
 	}
+
+	certs, err := ac.coreDNSProvider.renewCertificate(certs)
+	if err != nil {
+		log.Errorf("Error renewing certificate. the cert for the domain '%s' is probably to old. Trying to obtain a new one.", domain)
+		certs, err := ac.coreDNSProvider.obtainNewCertificate(domain)
+		return true, certs, err
+	}
+	return true, certs, err
 }

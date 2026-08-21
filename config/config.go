@@ -37,9 +37,13 @@ type ACMEChallengeConfig struct {
 }
 
 type ClusterConfig struct {
-	PeerService string
-	APIPort     int
-	OwnIP       string
+	PeerService  string
+	APIPort      int
+	OwnIP        string
+	StartupDelay time.Duration
 }
 
-const defaultClusterAPIPort = 8090
+const (
+	defaultClusterAPIPort      = 8090
+	defaultClusterStartupDelay = 5 * time.Second
+)

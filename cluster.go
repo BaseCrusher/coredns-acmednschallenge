@@ -18,52 +18,51 @@ import (
 const (
 	clusterAPITimeout = 2 * time.Second
 	clusterTick       = 5 * time.Second
-	clusterSettle     = clusterTick + 2*time.Second
-)
-
-type role int
-
-const (
-	roleFollower role = iota
-	roleLeaderPending
-	roleLeaderActive
 )
 
 type statusResponse struct {
-	Leader     bool                `json:"leader"`
 	Challenges map[string][]string `json:"challenges"`
+	Issuing    bool                `json:"issuing"`
+	Issuer     string              `json:"issuer,omitempty"`
+}
+
+type challengeUpdate struct {
+	Fqdn     string   `json:"fqdn"`
+	Values   []string `json:"values"`
+	Deleted  bool     `json:"deleted"`
+	IssuerIP string   `json:"issuerIp,omitempty"`
 }
 
 type cluster struct {
 	ac      *acmeChallenge
 	service string
 	port    int
+	ownIP   string
 
 	resolvePeers   func() ([]string, error)
 	isLocal        func(ip string) bool
 	getStatus      func(peer string) (statusResponse, bool)
-	postChallenges func(peer string, records map[string][]string)
+	postChallenges func(peer, fqdn string, values []string, deleted bool, issuerIP string)
 	tick           time.Duration
-	settle         time.Duration
+	startupDelay   time.Duration
 
 	httpClient *http.Client
 
-	mu           sync.Mutex
-	role         role
-	pendingSince time.Time
-	leaderCancel context.CancelFunc
-	otherIssuing bool
+	mu          sync.Mutex
+	issuing     int
+	myIP        string
+	knownIssuer string
 }
 
 func newCluster(ac *acmeChallenge, cfg *config.ClusterConfig) *cluster {
 	c := &cluster{
-		ac:         ac,
-		service:    cfg.PeerService,
-		port:       cfg.APIPort,
-		tick:       clusterTick,
-		settle:     clusterSettle,
-		httpClient: &http.Client{Timeout: clusterAPITimeout},
-		role:       roleFollower,
+		ac:           ac,
+		service:      cfg.PeerService,
+		port:         cfg.APIPort,
+		tick:         clusterTick,
+		ownIP:        cfg.OwnIP,
+		startupDelay: cfg.StartupDelay,
+		httpClient:   &http.Client{Timeout: clusterAPITimeout},
 	}
 	c.resolvePeers = func() ([]string, error) { return net.LookupHost(c.service) }
 	c.isLocal = isLocalIP
@@ -77,18 +76,15 @@ func newCluster(ac *acmeChallenge, cfg *config.ClusterConfig) *cluster {
 }
 
 func (c *cluster) run() {
-	c.ac.challenges.setOnChange(func() {
-		if c.currentRole() == roleLeaderActive {
-			c.pushToPeers()
-		}
-	})
-
+	c.ac.challenges.setOnChange(c.pushUpdate)
 	go c.serveAPI()
-
-	c.reconcile()
+	wait := c.startupDelay + ipJitter(c.ownIP)
+	log.Infof("cluster: waiting %s before first certificate check", wait)
+	time.Sleep(wait)
+	go c.ac.start(context.Background())
 	for {
-		time.Sleep(c.tick + jitter())
-		c.reconcile()
+		time.Sleep(c.tick)
+		c.cleanStaleChallenges()
 	}
 }
 
@@ -110,9 +106,24 @@ func (c *cluster) serveAPI() {
 		IdleTimeout:       30 * time.Second,
 	}
 	log.Infof("cluster API listening on %s", addr)
-	if err := srv.ListenAndServe(); err != nil {
-		log.Errorf("cluster API server stopped: %v", err)
+	for {
+		err := srv.ListenAndServe()
+		wait := time.Second + ipJitter(c.ownIP)
+		log.Errorf("cluster API server stopped: %v; restarting in %s", err, wait)
+		time.Sleep(wait)
 	}
+}
+
+func ipJitter(ip string) time.Duration {
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return jitter()
+	}
+	var sum int
+	for _, b := range parsed {
+		sum += int(b)
+	}
+	return time.Duration(sum%500) * time.Millisecond
 }
 
 func (c *cluster) handleStatus(w http.ResponseWriter, _ *http.Request) {
@@ -125,20 +136,34 @@ func (c *cluster) handleChallenges(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	var records map[string][]string
-	if err := json.NewDecoder(r.Body).Decode(&records); err != nil {
+	var upd challengeUpdate
+	if err := json.NewDecoder(r.Body).Decode(&upd); err != nil || upd.Fqdn == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	c.ac.challenges.replace(records)
+	if upd.IssuerIP != "" {
+		c.mu.Lock()
+		c.knownIssuer = upd.IssuerIP
+		c.mu.Unlock()
+	}
+	if upd.Deleted {
+		c.ac.challenges.applyDelete(upd.Fqdn)
+	} else {
+		c.ac.challenges.applySet(upd.Fqdn, upd.Values)
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func (c *cluster) localStatus() statusResponse {
-	return statusResponse{
-		Leader:     c.isLeaderClaimant(),
-		Challenges: c.ac.challenges.snapshot(),
+	snap := c.ac.challenges.snapshot()
+	c.mu.Lock()
+	issuing := c.issuing > 0
+	issuer := ""
+	if issuing {
+		issuer = c.myIP
 	}
+	c.mu.Unlock()
+	return statusResponse{Challenges: snap, Issuing: issuing, Issuer: issuer}
 }
 
 func (c *cluster) httpGetStatus(peer string) (statusResponse, bool) {
@@ -158,8 +183,8 @@ func (c *cluster) httpGetStatus(peer string) (statusResponse, bool) {
 	return st, true
 }
 
-func (c *cluster) httpPostChallenges(peer string, records map[string][]string) {
-	body, err := json.Marshal(records)
+func (c *cluster) httpPostChallenges(peer, fqdn string, values []string, deleted bool, issuerIP string) {
+	body, err := json.Marshal(challengeUpdate{Fqdn: fqdn, Values: values, Deleted: deleted, IssuerIP: issuerIP})
 	if err != nil {
 		return
 	}
@@ -177,8 +202,10 @@ func (c *cluster) httpPostChallenges(peer string, records map[string][]string) {
 	resp.Body.Close()
 }
 
-func (c *cluster) pushToPeers() {
-	snap := c.ac.challenges.snapshot()
+func (c *cluster) pushUpdate(fqdn string, values []string, deleted bool) {
+	c.mu.Lock()
+	issuerIP := c.myIP
+	c.mu.Unlock()
 	peers, err := c.resolvePeers()
 	if err != nil {
 		log.Errorf("cluster: resolve peers for push: %v", err)
@@ -188,156 +215,82 @@ func (c *cluster) pushToPeers() {
 		if c.isLocal(p) {
 			continue
 		}
-		go c.postChallenges(p, snap)
+		go c.postChallenges(p, fqdn, values, deleted, issuerIP)
 	}
 }
 
-func (c *cluster) reconcile() {
+func (c *cluster) canIssue() bool {
 	peers, err := c.resolvePeers()
 	if err != nil {
 		log.Errorf("cluster: peer resolution failed: %v", err)
-		return
+		return false
 	}
-
-	myIP := ""
-	for _, p := range peers {
-		if c.isLocal(p) {
-			myIP = p
-			break
-		}
-	}
+	myIP := c.localIP(peers)
 	if myIP == "" {
-		log.Warning("cluster: could not identify own IP among resolved peers; staying put")
-		return
+		log.Warningf("cluster: own IP not among addresses resolved for %q (%v); skipping certificate creation this cycle. If this persists, set OWN_IP in the clusterMode directive.", c.service, peers)
+		return false
 	}
 
-	states := map[string]statusResponse{myIP: c.localStatus()}
-	alive := map[string]bool{myIP: true}
-	var wg sync.WaitGroup
-	var mu sync.Mutex
 	for _, p := range peers {
 		if p == myIP {
 			continue
 		}
-		wg.Add(1)
-		go func(peer string) {
-			defer wg.Done()
-			st, ok := c.getStatus(peer)
-			mu.Lock()
-			alive[peer] = ok
-			if ok {
-				states[peer] = st
-			}
-			mu.Unlock()
-		}(p)
-	}
-	wg.Wait()
-
-	var claimants, aliveIPs []string
-	for ip := range alive {
-		if !alive[ip] {
-			continue
-		}
-		aliveIPs = append(aliveIPs, ip)
-		if states[ip].Leader {
-			claimants = append(claimants, ip)
-		}
-	}
-	pool := claimants
-	if len(pool) == 0 {
-		pool = aliveIPs
-	}
-	leaderIP := lowestIP(pool)
-
-	busyIncumbent := false
-	for _, ip := range aliveIPs {
-		if ip != myIP && states[ip].Leader && len(states[ip].Challenges) > 0 {
-			busyIncumbent = true
-			break
-		}
-	}
-	c.mu.Lock()
-	c.otherIssuing = busyIncumbent
-	c.mu.Unlock()
-
-	c.applyElection(myIP, leaderIP, states[leaderIP])
-}
-
-func (c *cluster) applyElection(myIP, leaderIP string, leaderStatus statusResponse) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if leaderIP == myIP {
-		switch c.role {
-		case roleFollower:
-			c.role = roleLeaderPending
-			c.pendingSince = time.Now()
-			log.Infof("cluster: claiming leadership (pending), ip=%s", myIP)
-		case roleLeaderPending:
-			if time.Since(c.pendingSince) >= c.settle {
-				c.startLeaderLoop()
-				log.Info("cluster: promoted to active leader")
-			}
-		case roleLeaderActive:
-		}
-		return
-	}
-
-	if c.role == roleLeaderActive && !c.ac.challenges.isEmpty() {
-		log.Info("cluster: lower-IP leader present but challenge in flight; deferring demotion")
-		return
-	}
-	if c.role == roleLeaderActive {
-		c.stopLeaderLoop()
-	}
-	if c.role != roleFollower {
-		log.Infof("cluster: following leader %s", leaderIP)
-	}
-	c.role = roleFollower
-	c.ac.challenges.replace(leaderStatus.Challenges)
-}
-
-func (c *cluster) startLeaderLoop() {
-	ctx, cancel := context.WithCancel(context.Background())
-	c.leaderCancel = cancel
-	c.role = roleLeaderActive
-	go c.ac.start(ctx)
-}
-
-func (c *cluster) stopLeaderLoop() {
-	if c.leaderCancel != nil {
-		c.leaderCancel()
-		c.leaderCancel = nil
-	}
-}
-
-func (c *cluster) currentRole() role {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.role
-}
-
-func (c *cluster) otherNodeIssuing() bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.otherIssuing
-}
-
-func (c *cluster) waitForSoleIssuer(ctx context.Context) bool {
-	for c.otherNodeIssuing() {
-		log.Info("cluster: another node is issuing; waiting before starting cert cycle")
-		select {
-		case <-ctx.Done():
+		if st, ok := c.getStatus(p); ok && st.Issuing {
+			log.Infof("cluster: peer %s is already issuing (as %q); skipping this cycle", p, st.Issuer)
 			return false
-		case <-time.After(c.tick):
 		}
 	}
+
+	if lowestIP(peers) != myIP {
+		return false
+	}
+	c.mu.Lock()
+	c.myIP = myIP
+	c.mu.Unlock()
 	return true
 }
 
-func (c *cluster) isLeaderClaimant() bool {
-	r := c.currentRole()
-	return r == roleLeaderPending || r == roleLeaderActive
+func (c *cluster) beginIssue() {
+	c.mu.Lock()
+	c.issuing++
+	c.mu.Unlock()
+}
+
+func (c *cluster) endIssue() {
+	c.mu.Lock()
+	c.issuing--
+	c.mu.Unlock()
+}
+
+func (c *cluster) amIssuing() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.issuing > 0
+}
+
+func (c *cluster) cleanStaleChallenges() {
+	if c.ac.challenges.isEmpty() || c.amIssuing() {
+		return
+	}
+	c.mu.Lock()
+	issuer := c.knownIssuer
+	c.mu.Unlock()
+	if issuer != "" && !c.isLocal(issuer) {
+		if st, ok := c.getStatus(issuer); ok && st.Issuing {
+			return
+		}
+	}
+	log.Info("cluster: issuer done or unreachable; clearing stale challenge records")
+	c.ac.challenges.replace(nil)
+}
+
+func (c *cluster) localIP(peers []string) string {
+	for _, p := range peers {
+		if c.isLocal(p) {
+			return p
+		}
+	}
+	return ""
 }
 
 func isLocalIP(ip string) bool {
