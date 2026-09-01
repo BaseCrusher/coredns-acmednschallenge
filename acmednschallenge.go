@@ -10,6 +10,7 @@ import (
 
 	"github.com/coredns/coredns/plugin"
 	"github.com/coredns/coredns/plugin/acmednschallenge/config"
+	"github.com/coredns/coredns/plugin/metrics"
 	"github.com/coredns/coredns/plugin/acmednschallenge/storage"
 	clog "github.com/coredns/coredns/plugin/pkg/log"
 	"github.com/coredns/coredns/request"
@@ -105,6 +106,7 @@ func (ac *acmeChallenge) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *
 	}
 
 	w.WriteMsg(msg)
+	challengeResponses.WithLabelValues(metrics.WithServer(ctx)).Inc()
 
 	return dns.RcodeSuccess, nil
 }
@@ -187,6 +189,7 @@ func (ac *acmeChallenge) checkAndCreateOrRenewCert(domain string) (bool, *certif
 	if certs == nil {
 		log.Infof("No certificate found for %s, obtaining new one", domain)
 		certs, err := ac.coreDNSProvider.obtainNewCertificate(domain)
+		recordObtain(domain, "obtained", err)
 		return true, certs, err
 	}
 
@@ -194,7 +197,9 @@ func (ac *acmeChallenge) checkAndCreateOrRenewCert(domain string) (bool, *certif
 	if err != nil {
 		log.Errorf("Error renewing certificate. the cert for the domain '%s' is probably to old. Trying to obtain a new one.", domain)
 		certs, err := ac.coreDNSProvider.obtainNewCertificate(domain)
+		recordObtain(domain, "obtained", err)
 		return true, certs, err
 	}
+	recordObtain(domain, "renewed", nil)
 	return true, certs, err
 }

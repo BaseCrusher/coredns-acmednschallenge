@@ -19,6 +19,8 @@ func checkIfCertIsValid(ac *acmeChallenge, certs *certificate.Resource) bool {
 		return false
 	}
 
+	certExpiry.WithLabelValues(certs.Domain).Set(float64(cert.NotAfter.Unix()))
+
 	daysLeft := int(time.Until(cert.NotAfter).Hours() / 24)
 	log.Infof("Certificate for %s expires in %d days", certs.Domain, daysLeft)
 

@@ -199,6 +199,7 @@ func (c *cluster) httpPostChallenges(peer, fqdn string, values []string, deleted
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		clusterPushFailures.Inc()
 		clusterLog.Warningf("push to %s failed: %v", peer, err)
 		return
 	}
@@ -228,6 +229,7 @@ func (c *cluster) canIssue() bool {
 		clusterLog.Errorf("peer resolution failed: %v", err)
 		return false
 	}
+	clusterPeers.Set(float64(len(peers)))
 	myIP := c.localIP(peers)
 	if myIP == "" {
 		clusterLog.Warningf("own IP not among addresses resolved for %q (%v); skipping certificate creation this cycle. Make sure that the coredns can reach the network. If this persists, set OWN_IP in the clusterMode directive.", c.service, peers)
@@ -260,12 +262,17 @@ func (c *cluster) beginIssue() {
 	c.mu.Lock()
 	c.issuing++
 	c.mu.Unlock()
+	clusterIssuing.Set(1)
 }
 
 func (c *cluster) endIssue() {
 	c.mu.Lock()
 	c.issuing--
+	issuing := c.issuing
 	c.mu.Unlock()
+	if issuing <= 0 {
+		clusterIssuing.Set(0)
+	}
 }
 
 func (c *cluster) amIssuing() bool {

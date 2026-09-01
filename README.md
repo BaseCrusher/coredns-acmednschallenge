@@ -234,6 +234,22 @@ example.org:53 {
 }
 ~~~
 
+## Metrics
+
+If the [`prometheus`](https://coredns.io/plugins/metrics/) plugin is enabled, the following metrics are
+exported under the `coredns_acmednschallenge_` prefix:
+
+* `cert_expiry_timestamp_seconds{domain}` – certificate expiry (`NotAfter`) as a unix timestamp. Alert on
+  `(coredns_acmednschallenge_cert_expiry_timestamp_seconds - time()) / 86400 < <days>`.
+* `obtain_total{domain, result}` – count of obtain/renew attempts; `result` is `obtained`, `renewed`, or `failed`.
+* `challenge_responses_total{server}` – count of ACME DNS-01 TXT challenge responses served.
+
+In cluster mode these are also exported:
+
+* `cluster_peers` – number of peers resolved on the last discovery.
+* `cluster_issuing` – `1` while this node is issuing/renewing, `0` otherwise.
+* `cluster_push_failures_total` – count of failed challenge pushes to peers.
+
 ## Building
 
 This plugin must be compiled into CoreDNS. Add it to
