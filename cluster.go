@@ -13,7 +13,10 @@ import (
 	"time"
 
 	"github.com/coredns/coredns/plugin/acmednschallenge/config"
+	clog "github.com/coredns/coredns/plugin/pkg/log"
 )
+
+var clusterLog = clog.NewWithPlugin(name + "/cluster")
 
 const (
 	clusterAPITimeout = 2 * time.Second
@@ -79,7 +82,7 @@ func (c *cluster) run() {
 	c.ac.challenges.setOnChange(c.pushUpdate)
 	go c.serveAPI()
 	wait := c.startupDelay + ipJitter(c.ownIP)
-	log.Infof("cluster: waiting %s before first certificate check", wait)
+	clusterLog.Infof("waiting %s before first certificate check", wait)
 	time.Sleep(wait)
 	go c.ac.start(context.Background())
 	for {
@@ -105,11 +108,11 @@ func (c *cluster) serveAPI() {
 		WriteTimeout:      5 * time.Second,
 		IdleTimeout:       30 * time.Second,
 	}
-	log.Infof("cluster API listening on %s", addr)
+	clusterLog.Infof("cluster API listening on %s", addr)
 	for {
 		err := srv.ListenAndServe()
 		wait := time.Second + ipJitter(c.ownIP)
-		log.Errorf("cluster API server stopped: %v; restarting in %s", err, wait)
+		clusterLog.Errorf("cluster API server stopped: %v; restarting in %s", err, wait)
 		time.Sleep(wait)
 	}
 }
@@ -196,7 +199,7 @@ func (c *cluster) httpPostChallenges(peer, fqdn string, values []string, deleted
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		log.Warningf("cluster: push to %s failed: %v", peer, err)
+		clusterLog.Warningf("push to %s failed: %v", peer, err)
 		return
 	}
 	resp.Body.Close()
@@ -208,7 +211,7 @@ func (c *cluster) pushUpdate(fqdn string, values []string, deleted bool) {
 	c.mu.Unlock()
 	peers, err := c.resolvePeers()
 	if err != nil {
-		log.Errorf("cluster: resolve peers for push: %v", err)
+		clusterLog.Errorf("resolve peers for push: %v", err)
 		return
 	}
 	for _, p := range peers {
@@ -222,21 +225,23 @@ func (c *cluster) pushUpdate(fqdn string, values []string, deleted bool) {
 func (c *cluster) canIssue() bool {
 	peers, err := c.resolvePeers()
 	if err != nil {
-		log.Errorf("cluster: peer resolution failed: %v", err)
+		clusterLog.Errorf("peer resolution failed: %v", err)
 		return false
 	}
 	myIP := c.localIP(peers)
 	if myIP == "" {
-		log.Warningf("cluster: own IP not among addresses resolved for %q (%v); skipping certificate creation this cycle. If this persists, set OWN_IP in the clusterMode directive.", c.service, peers)
+		clusterLog.Warningf("own IP not among addresses resolved for %q (%v); skipping certificate creation this cycle. Make sure that the coredns can reach the network. If this persists, set OWN_IP in the clusterMode directive.", c.service, peers)
 		return false
 	}
+
+	clusterLog.Infof("discovered coredns peers for %q: %v; this node=%s; %s is most likely to issue (lowest IP, may change if a node joins)", c.service, peers, myIP, lowestIP(peers))
 
 	for _, p := range peers {
 		if p == myIP {
 			continue
 		}
 		if st, ok := c.getStatus(p); ok && st.Issuing {
-			log.Infof("cluster: peer %s is already issuing (as %q); skipping this cycle", p, st.Issuer)
+			clusterLog.Infof("peer %s is already issuing (as %q); skipping this cycle", p, st.Issuer)
 			return false
 		}
 	}
@@ -244,6 +249,7 @@ func (c *cluster) canIssue() bool {
 	if lowestIP(peers) != myIP {
 		return false
 	}
+	clusterLog.Infof("this node (%s) will issue/renew the cert", myIP)
 	c.mu.Lock()
 	c.myIP = myIP
 	c.mu.Unlock()
@@ -280,7 +286,7 @@ func (c *cluster) cleanStaleChallenges() {
 			return
 		}
 	}
-	log.Info("cluster: issuer done or unreachable; clearing stale challenge records")
+	clusterLog.Info("issuer done or unreachable; clearing stale challenge records")
 	c.ac.challenges.replace(nil)
 }
 
