@@ -152,8 +152,10 @@ func (ac *acmeChallenge) updateCertForDomain(domain string) {
 				if err := ac.storage.Save(certs); err != nil {
 					log.Errorf("could not save certificate for domain '%s': %v", domain, err)
 				}
-			} else {
+			} else if certs != nil {
 				log.Infof("Certificate for domain '%s' is still valid, do nothing", domain)
+			} else {
+				log.Infof("Skipping certificate for domain '%s' this cycle (another node is issuing)", domain)
 			}
 			return
 		}
