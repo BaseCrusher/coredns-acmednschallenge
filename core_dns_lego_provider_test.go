@@ -24,7 +24,7 @@ func newProviderConfig(email string) *config.ACMEChallengeConfig {
 	return &config.ACMEChallengeConfig{Email: email, ManagedDomains: map[string][]string{}}
 }
 
-func TestNewCoreDnsLegoProviderGeneratesKey(t *testing.T) {
+func TestNewCoreDnsLegoProviderDefersKeyCreation(t *testing.T) {
 	acc := newFakeAccount()
 	cfg := newProviderConfig("new@example.com")
 
@@ -35,18 +35,41 @@ func TestNewCoreDnsLegoProviderGeneratesKey(t *testing.T) {
 	if p.acmeUser.alreadyExists {
 		t.Error("alreadyExists = true, want false for a freshly generated account")
 	}
+	if p.acmeUser.Key != nil {
+		t.Error("account key generated at startup, want deferred to issuing path")
+	}
+	if acc.saveCalls != 0 {
+		t.Errorf("SaveAccountKey called %d times at startup, want 0", acc.saveCalls)
+	}
+
+	ac := &acmeChallenge{coreDNSProvider: p, accountStore: acc}
+	if err := ac.ensureAccountKey(); err != nil {
+		t.Fatalf("ensureAccountKey: %v", err)
+	}
 	if p.acmeUser.Key == nil {
-		t.Error("account key was not generated")
+		t.Error("account key was not generated on issue")
 	}
 	if acc.saveCalls != 1 {
 		t.Errorf("SaveAccountKey called %d times, want 1", acc.saveCalls)
+	}
+
+	if err := ac.ensureAccountKey(); err != nil {
+		t.Fatalf("ensureAccountKey (2nd): %v", err)
+	}
+	if acc.saveCalls != 1 {
+		t.Errorf("SaveAccountKey called %d times after 2nd ensure, want 1", acc.saveCalls)
 	}
 }
 
 func TestNewCoreDnsLegoProviderLoadsExistingKey(t *testing.T) {
 	acc := newFakeAccount()
-	if _, err := newCoreDnsLegoProvider(newProviderConfig("me@example.com"), acc, newChallengeStore(), "test"); err != nil {
+	seed, err := newCoreDnsLegoProvider(newProviderConfig("me@example.com"), acc, newChallengeStore(), "test")
+	if err != nil {
 		t.Fatalf("seed: %v", err)
+	}
+	seedAc := &acmeChallenge{coreDNSProvider: seed, accountStore: acc}
+	if err := seedAc.ensureAccountKey(); err != nil {
+		t.Fatalf("seed key: %v", err)
 	}
 	acc.saveCalls = 0
 

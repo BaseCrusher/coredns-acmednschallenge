@@ -2,6 +2,10 @@ package acmednschallenge
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"encoding/pem"
 	"fmt"
 	"maps"
 	"strings"
@@ -10,10 +14,11 @@ import (
 
 	"github.com/coredns/coredns/plugin"
 	"github.com/coredns/coredns/plugin/acmednschallenge/config"
-	"github.com/coredns/coredns/plugin/metrics"
 	"github.com/coredns/coredns/plugin/acmednschallenge/storage"
+	"github.com/coredns/coredns/plugin/metrics"
 	clog "github.com/coredns/coredns/plugin/pkg/log"
 	"github.com/coredns/coredns/request"
+	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/certificate"
 	"github.com/miekg/dns"
 )
@@ -25,6 +30,7 @@ type acmeChallenge struct {
 	config          *config.ACMEChallengeConfig
 	challenges      *challengeStore
 	coreDNSProvider *coreDnsLegoProvider
+	accountStore    storage.AccountStorage
 	storage         storage.CertStorage
 	obtainOrRenew   func(domain string) (bool, *certificate.Resource, error)
 	cluster         *cluster
@@ -52,6 +58,7 @@ func newAcmeChallenge(config *config.ACMEChallengeConfig) (*acmeChallenge, error
 		config:          config,
 		challenges:      challenges,
 		coreDNSProvider: coreDNSProvider,
+		accountStore:    accountStore,
 		storage:         certStorage,
 	}
 	challenge.obtainOrRenew = challenge.checkAndCreateOrRenewCert
@@ -171,6 +178,23 @@ func (ac *acmeChallenge) updateCertForDomain(domain string) {
 	}
 }
 
+func (ac *acmeChallenge) ensureAccountKey() error {
+	user := ac.coreDNSProvider.acmeUser
+	if user.Key != nil {
+		return nil
+	}
+	pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return fmt.Errorf("could not create ACME account key: %w", err)
+	}
+	if err := ac.accountStore.SaveAccountKey(user.Email, pem.EncodeToMemory(certcrypto.PEMBlock(pk))); err != nil {
+		return err
+	}
+	user.Key = pk
+	log.Infof("registered new Let's Encrypt account for %s", user.Email)
+	return nil
+}
+
 func (ac *acmeChallenge) checkAndCreateOrRenewCert(domain string) (bool, *certificate.Resource, error) {
 	certs := ac.storage.Load(domain)
 	if certs != nil && checkIfCertIsValid(ac, certs) {
@@ -184,6 +208,10 @@ func (ac *acmeChallenge) checkAndCreateOrRenewCert(domain string) (bool, *certif
 		}
 		ac.cluster.beginIssue()
 		defer ac.cluster.endIssue()
+	}
+
+	if err := ac.ensureAccountKey(); err != nil {
+		return false, nil, err
 	}
 
 	if certs == nil {

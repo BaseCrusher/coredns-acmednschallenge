@@ -1,11 +1,6 @@
 package acmednschallenge
 
 import (
-	"crypto"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
-	"encoding/pem"
 	"fmt"
 	"time"
 
@@ -36,35 +31,15 @@ func newCoreDnsLegoProvider(acc *config.ACMEChallengeConfig, account storage.Acc
 	acmeLogger := clog.NewWithPlugin(loggerName)
 	acmeLog.Logger = &logger{logger: acmeLogger}
 
-	var privateKey crypto.PrivateKey
-	alreadyExists := false
-
+	user := &AcmeUser{Email: acc.Email}
 	if keyPEM := account.LoadAccountKey(acc.Email); keyPEM != nil {
 		pk, err := certcrypto.ParsePEMPrivateKey(keyPEM)
 		if err != nil {
 			return nil, fmt.Errorf("could not parse ACME account key for %s: %w", acc.Email, err)
 		}
-		privateKey = pk
-		alreadyExists = true
+		user.Key = pk
+		user.alreadyExists = true
 		log.Infof("loaded existing Let's Encrypt account for %s", acc.Email)
-	} else {
-		pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-		if err != nil {
-			return nil, fmt.Errorf("could not create ACME account key: %w", err)
-		}
-		privateKey = pk
-
-		keyPEM := pem.EncodeToMemory(certcrypto.PEMBlock(pk))
-		if err := account.SaveAccountKey(acc.Email, keyPEM); err != nil {
-			return nil, err
-		}
-		log.Infof("registered new Let's Encrypt account for %s", acc.Email)
-	}
-
-	user := &AcmeUser{
-		Email:         acc.Email,
-		Key:           privateKey,
-		alreadyExists: alreadyExists,
 	}
 
 	provider := &coreDnsLegoProvider{
