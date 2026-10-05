@@ -1,0 +1,18 @@
+example.org:5354 {
+    reload 2s 1s
+    acmednschallenge {
+        email admin@example.org
+        acceptedLetsEncryptToS
+        skipDnsPropagationTest
+        certificateStorageDisk __CERT_DIR__
+        acmeAccountStorageDisk __ACCT_DIR__
+        customCAD https://127.0.0.1:14000/dir
+        allowInsecureCAD
+        customNameservers 127.0.0.1:5354
+        renewBeforeDays 120
+    }
+
+    whoami
+    log
+    errors
+}
