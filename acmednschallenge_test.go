@@ -127,23 +127,6 @@ func TestPresentCleanUp(t *testing.T) {
 	}
 }
 
-func TestContains(t *testing.T) {
-	s := []int{0, 2, 5}
-	for _, v := range []int{0, 2, 5} {
-		if !contains(s, v) {
-			t.Errorf("contains(%v, %d) = false, want true", s, v)
-		}
-	}
-	for _, v := range []int{1, 3, -1} {
-		if contains(s, v) {
-			t.Errorf("contains(%v, %d) = true, want false", s, v)
-		}
-	}
-	if contains(nil, 0) {
-		t.Error("contains(nil, 0) = true, want false")
-	}
-}
-
 func TestStripLogPrefix(t *testing.T) {
 	tests := []struct {
 		in, want string

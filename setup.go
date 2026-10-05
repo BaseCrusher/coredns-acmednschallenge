@@ -12,27 +12,22 @@ import (
 
 const name = "acmednschallenge"
 
-var registeredForBlock []int
+type registeredKey struct{}
 
 func init() { plugin.Register(name, setup) }
-
-func contains(slice []int, value int) bool {
-	for _, v := range slice {
-		if v == value {
-			return true
-		}
-	}
-	return false
-}
 
 func setup(c *caddy.Controller) error {
 	blockIdx := c.ServerBlockIndex
 
-	if contains(registeredForBlock, blockIdx) {
+	registered, _ := c.Get(registeredKey{}).(map[int]bool)
+	if registered == nil {
+		registered = map[int]bool{}
+		c.Set(registeredKey{}, registered)
+	}
+	if registered[blockIdx] {
 		return plugin.Error(name, errors.New("only one acmechallenge per server block is allowed"))
 	}
-
-	registeredForBlock = append(registeredForBlock, c.ServerBlockIndex)
+	registered[blockIdx] = true
 
 	cfg, err := config.ParseConfig(c)
 	if err != nil {
