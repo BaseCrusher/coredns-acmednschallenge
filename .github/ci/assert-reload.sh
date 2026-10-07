@@ -16,6 +16,7 @@ trap 'kill "$PID" 2>/dev/null || true; wait "$PID" 2>/dev/null || true; rm -rf "
 
 dump() { echo "----- coredns log -----" >&2; cat "$LOG" >&2; }
 sha_count() { grep -c 'Running configuration SHA512' "$LOG" || true; }
+api_err_count() { grep -c 'cluster API server stopped' "$LOG" || true; }
 
 for ((i = 0; i < TIMEOUT; i++)); do
   [ "$(sha_count)" -ge 1 ] && break
@@ -35,9 +36,22 @@ for ((i = 0; i < TIMEOUT; i++)); do
   fi
   if [ "$(sha_count)" -gt "$FIRST" ]; then
     echo "reloaded cleanly after ${i}s (sha512 lines=$(sha_count))"
-    exit 0
+    break
   fi
   sleep 1
 done
 
-echo "TIMEOUT after ${TIMEOUT}s: server never reloaded" >&2; dump; exit 1
+if [ "$(sha_count)" -le "$FIRST" ]; then
+  echo "TIMEOUT after ${TIMEOUT}s: server never reloaded" >&2; dump; exit 1
+fi
+
+C1="$(api_err_count)"
+sleep 5
+C2="$(api_err_count)"
+if [ "$C2" -gt "$C1" ]; then
+  echo "cluster API listener leaked across reload: errors still accruing ($C1 -> $C2 over 5s)" >&2
+  grep 'cluster API server stopped' "$LOG" | tail -5 >&2
+  dump; exit 1
+fi
+echo "no cluster API listener leak (errors stable at $C2)"
+exit 0

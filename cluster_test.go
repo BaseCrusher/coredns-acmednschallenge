@@ -1,12 +1,58 @@
 package acmednschallenge
 
 import (
+	"context"
+	"fmt"
+	"net"
 	"testing"
 	"time"
 
 	"github.com/coredns/coredns/plugin/acmednschallenge/config"
 	"github.com/go-acme/lego/v4/certificate"
 )
+
+func freePort(t *testing.T) int {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("pick free port: %v", err)
+	}
+	defer ln.Close()
+	return ln.Addr().(*net.TCPAddr).Port
+}
+
+func TestServeAPIReleasesPortOnCancel(t *testing.T) {
+	ac := &acmeChallenge{challenges: newChallengeStore()}
+	port := freePort(t)
+	c := &cluster{ac: ac, port: port}
+	c.ctx, c.cancel = context.WithCancel(context.Background())
+
+	done := make(chan struct{})
+	go func() { c.serveAPI(); close(done) }()
+
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	waitFor(t, "cluster API to start listening", func() bool {
+		conn, err := net.DialTimeout("tcp", addr, 50*time.Millisecond)
+		if err != nil {
+			return false
+		}
+		conn.Close()
+		return true
+	})
+
+	c.stop()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("serveAPI did not return after context cancel")
+	}
+
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		t.Fatalf("port %d still in use after stop(); listener leaked: %v", port, err)
+	}
+	ln.Close()
+}
 
 type testNode struct {
 	ip    string

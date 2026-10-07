@@ -51,6 +51,10 @@ type cluster struct {
 
 	httpClient *http.Client
 
+	srv    *http.Server
+	ctx    context.Context
+	cancel context.CancelFunc
+
 	mu          sync.Mutex
 	issuing     int
 	myIP        string
@@ -67,6 +71,7 @@ func newCluster(ac *acmeChallenge, cfg *config.ClusterConfig) *cluster {
 		startupDelay: cfg.StartupDelay,
 		httpClient:   &http.Client{Timeout: clusterAPITimeout},
 	}
+	c.ctx, c.cancel = context.WithCancel(context.Background())
 	c.resolvePeers = func() ([]string, error) { return net.LookupHost(c.service) }
 	c.isLocal = isLocalIP
 	if cfg.OwnIP != "" {
@@ -78,16 +83,30 @@ func newCluster(ac *acmeChallenge, cfg *config.ClusterConfig) *cluster {
 	return c
 }
 
-func (c *cluster) run() {
+func (c *cluster) start() {
 	c.ac.challenges.setOnChange(c.pushUpdate)
 	go c.serveAPI()
 	wait := c.startupDelay + ipJitter(c.ownIP)
 	clusterLog.Infof("waiting %s before first certificate check", wait)
-	time.Sleep(wait)
-	go c.ac.start(context.Background())
+	select {
+	case <-c.ctx.Done():
+		return
+	case <-time.After(wait):
+	}
+	go c.ac.start(c.ctx)
 	for {
-		time.Sleep(c.tick)
-		c.cleanStaleChallenges()
+		select {
+		case <-c.ctx.Done():
+			return
+		case <-time.After(c.tick):
+			c.cleanStaleChallenges()
+		}
+	}
+}
+
+func (c *cluster) stop() {
+	if c.cancel != nil {
+		c.cancel()
 	}
 }
 
@@ -100,7 +119,7 @@ func (c *cluster) serveAPI() {
 	mux.HandleFunc("/acme/status", c.handleStatus)
 	mux.HandleFunc("/acme/challenges", c.handleChallenges)
 	addr := fmt.Sprintf(":%d", c.port)
-	srv := &http.Server{
+	c.srv = &http.Server{
 		Addr:              addr,
 		Handler:           mux,
 		ReadTimeout:       5 * time.Second,
@@ -108,9 +127,16 @@ func (c *cluster) serveAPI() {
 		WriteTimeout:      5 * time.Second,
 		IdleTimeout:       30 * time.Second,
 	}
+	go func() {
+		<-c.ctx.Done()
+		_ = c.srv.Shutdown(context.Background())
+	}()
 	clusterLog.Infof("cluster API listening on %s", addr)
 	for {
-		err := srv.ListenAndServe()
+		err := c.srv.ListenAndServe()
+		if c.ctx.Err() != nil {
+			return
+		}
 		wait := time.Second + ipJitter(c.ownIP)
 		clusterLog.Errorf("cluster API server stopped: %v; restarting in %s", err, wait)
 		time.Sleep(wait)

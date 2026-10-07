@@ -41,12 +41,19 @@ func setup(c *caddy.Controller) error {
 
 	c.OnStartup(func() error {
 		if ac.cluster != nil {
-			go ac.cluster.run()
+			go ac.cluster.start()
 		} else {
 			go ac.start(context.Background())
 		}
 		return nil
 	})
+
+	if ac.cluster != nil {
+		c.OnShutdown(func() error {
+			ac.cluster.stop()
+			return nil
+		})
+	}
 
 	dnsserver.GetConfig(c).AddPlugin(func(next plugin.Handler) plugin.Handler {
 		ac.Next = next

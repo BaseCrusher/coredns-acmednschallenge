@@ -92,6 +92,8 @@ jobs:
         working-directory: ${{ runner.temp }}/coredns
       - name: Reload with acmednschallenge configured
         run: .github/ci/assert-reload.sh "$RUNNER_TEMP/coredns-bin" .github/ci/corefiles/Corefile.reload
+      - name: Reload in cluster mode (API listener must not leak the port)
+        run: .github/ci/assert-reload.sh "$RUNNER_TEMP/coredns-bin" .github/ci/corefiles/Corefile.reload-cluster
 
   integration-vault:
     name: integration test vault (coredns ${{ matrix.coredns }})
